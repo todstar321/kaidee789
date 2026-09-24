@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, execute } from '@/lib/db';
 import { MenuItem, Category } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('store_id');
 
@@ -14,9 +13,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
     }
 
-    const categories = db.prepare('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC').all(storeId) as unknown as Category[];
-    const items = db.prepare('SELECT * FROM menu_items WHERE store_id = ? ORDER BY created_at DESC, name ASC').all(storeId) as unknown as MenuItem[];
-    const tiers = db.prepare('SELECT * FROM buffet_tiers WHERE store_id = ? ORDER BY sort_order ASC').all(storeId);
+    const categories = await query<Category>('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
+    const items = await query<MenuItem>('SELECT * FROM menu_items WHERE store_id = ? ORDER BY created_at DESC, name ASC', [storeId]);
+    const tiers = await query('SELECT * FROM buffet_tiers WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
 
     return NextResponse.json({
       categories,
@@ -31,7 +30,6 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
     const { action, store_id } = body;
 
@@ -42,10 +40,10 @@ export async function POST(req: Request) {
     if (action === 'category') {
       const { name, icon, sort_order } = body;
       const id = 'cat_' + Math.random().toString(36).substring(2, 9);
-      db.prepare(`
+      await execute(`
         INSERT INTO categories (id, store_id, name, icon, sort_order)
         VALUES (?, ?, ?, ?, ?)
-      `).run(id, store_id, name, icon || 'Utensils', Number(sort_order || 0));
+      `, [id, store_id, name, icon || 'Utensils', Number(sort_order || 0)]);
       return NextResponse.json({ success: true, id });
     }
 
@@ -56,11 +54,11 @@ export async function POST(req: Request) {
     }
 
     const id = 'm_' + Math.random().toString(36).substring(2, 9);
-    db.prepare(`
+    await execute(`
       INSERT INTO menu_items (
         id, store_id, category_id, name, description, price, cost_price, image_url, is_available, min_buffet_tier_id, options_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(
+    `, [
       id,
       store_id,
       category_id,
@@ -71,7 +69,7 @@ export async function POST(req: Request) {
       image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=400&fit=crop',
       min_buffet_tier_id || null,
       options_json || ''
-    );
+    ]);
 
     return NextResponse.json({ success: true, id, message: 'เพิ่มเมนูอาหารเรียบร้อยแล้ว' });
   } catch (error) {
@@ -82,7 +80,6 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
     const { id, name, category_id, description, price, cost_price, image_url, is_available, min_buffet_tier_id } = body;
 
@@ -90,7 +87,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Item id is required' }, { status: 400 });
     }
 
-    db.prepare(`
+    await execute(`
       UPDATE menu_items
       SET name = COALESCE(?, name),
           category_id = COALESCE(?, category_id),
@@ -101,7 +98,7 @@ export async function PUT(req: Request) {
           is_available = COALESCE(?, is_available),
           min_buffet_tier_id = ?
       WHERE id = ?
-    `).run(
+    `, [
       name,
       category_id,
       description,
@@ -111,7 +108,7 @@ export async function PUT(req: Request) {
       is_available !== undefined ? Number(is_available) : null,
       min_buffet_tier_id !== undefined ? min_buffet_tier_id : null,
       id
-    );
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -122,7 +119,6 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
@@ -130,7 +126,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+    await execute('DELETE FROM menu_items WHERE id = ?', [id]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete menu item:', error);

@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, execute } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: Request,
   { params }: { params: { storeId: string } }
 ) {
   try {
-    const db = getDb();
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(params.storeId);
+    const store = await queryOne('SELECT * FROM stores WHERE id = ?', [params.storeId]);
     if (!store) {
       return NextResponse.json({ error: 'Store not found' }, { status: 404 });
     }
 
-    const tiers = db.prepare('SELECT * FROM buffet_tiers WHERE store_id = ? ORDER BY sort_order ASC').all(params.storeId);
-    const staff = db.prepare('SELECT id, name, pin, role, is_active FROM store_staff WHERE store_id = ?').all(params.storeId);
+    const tiers = await query('SELECT * FROM buffet_tiers WHERE store_id = ? ORDER BY sort_order ASC', [params.storeId]);
+    const staff = await query('SELECT id, name, pin, role, is_active FROM store_staff WHERE store_id = ?', [params.storeId]);
 
     return NextResponse.json({
       ...store,
@@ -31,15 +32,14 @@ export async function PUT(
   { params }: { params: { storeId: string } }
 ) {
   try {
-    const db = getDb();
     const body = await req.json();
 
-    const existing = db.prepare('SELECT * FROM stores WHERE id = ?').get(params.storeId);
+    const existing = await queryOne('SELECT * FROM stores WHERE id = ?', [params.storeId]);
     if (!existing) {
       return NextResponse.json({ error: 'Store not found' }, { status: 404 });
     }
 
-    db.prepare(`
+    await execute(`
       UPDATE stores
       SET name = COALESCE(?, name),
           type = COALESCE(?, type),
@@ -53,7 +53,7 @@ export async function PUT(
           plan_billing_type = COALESCE(?, plan_billing_type),
           plan_expires_at = COALESCE(?, plan_expires_at)
       WHERE id = ?
-    `).run(
+    `, [
       body.name,
       body.type,
       body.phone,
@@ -66,7 +66,7 @@ export async function PUT(
       body.plan_billing_type,
       body.plan_expires_at,
       params.storeId
-    );
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -80,8 +80,7 @@ export async function DELETE(
   { params }: { params: { storeId: string } }
 ) {
   try {
-    const db = getDb();
-    db.prepare('DELETE FROM stores WHERE id = ?').run(params.storeId);
+    await execute('DELETE FROM stores WHERE id = ?', [params.storeId]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete store:', error);

@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { execute } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
-    const { item_id, status } = body; // 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled'
+    const { item_id, status } = body;
 
     if (!item_id || !status) {
       return NextResponse.json({ error: 'Missing item_id or status' }, { status: 400 });
     }
 
-    db.prepare('UPDATE order_items SET status = ? WHERE id = ?').run(status, item_id);
+    await execute('UPDATE order_items SET status = ? WHERE id = ?', [status, item_id]);
 
     return NextResponse.json({
       success: true,

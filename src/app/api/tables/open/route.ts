@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryOne, execute } from '@/lib/db';
 import { Store, Table } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
     const { store_id, table_id, guest_count, buffet_tier_id } = body;
 
@@ -12,18 +13,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing store_id or table_id' }, { status: 400 });
     }
 
-    const table = db.prepare('SELECT * FROM tables WHERE id = ? AND store_id = ?').get(table_id, store_id) as unknown as Table | undefined;
+    const table = await queryOne<Table>('SELECT * FROM tables WHERE id = ? AND store_id = ?', [table_id, store_id]);
     if (!table) {
       return NextResponse.json({ error: 'Table not found' }, { status: 404 });
     }
 
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id) as unknown as Store | undefined;
+    const store = await queryOne<Store>('SELECT * FROM stores WHERE id = ?', [store_id]);
     if (!store) {
       return NextResponse.json({ error: 'Store not found' }, { status: 404 });
     }
 
     const sessionId = 'sess_' + Math.random().toString(36).substring(2, 9);
-    const token = sessionId; // dynamic QR code token
+    const token = sessionId;
     const now = new Date();
     const openedAt = now.toISOString();
 
@@ -35,11 +36,11 @@ export async function POST(req: Request) {
     }
 
     // Insert session
-    db.prepare(`
+    await execute(`
       INSERT INTO table_sessions (
         id, store_id, table_id, opened_at, guest_count, buffet_tier_id, buffet_end_time, status, qr_code_token
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
-    `).run(
+    `, [
       sessionId,
       store_id,
       table_id,
@@ -48,22 +49,22 @@ export async function POST(req: Request) {
       buffet_tier_id || null,
       buffetEndTime,
       token
-    );
+    ]);
 
     // Update table
-    db.prepare(`
+    await execute(`
       UPDATE tables
       SET status = 'occupied', current_session_id = ?
       WHERE id = ?
-    `).run(sessionId, table_id);
+    `, [sessionId, table_id]);
 
     // Auto-create Guest A (e.g. "โต๊ะ 1-A")
     const guestId = 'g_' + Math.random().toString(36).substring(2, 9);
     const guestLabel = `${table.table_number}-A`;
-    db.prepare(`
+    await execute(`
       INSERT INTO guests (id, session_id, guest_code, guest_label, nickname, joined_at)
       VALUES (?, ?, 'A', ?, 'ลูกค้า A', ?)
-    `).run(guestId, sessionId, guestLabel, openedAt);
+    `, [guestId, sessionId, guestLabel, openedAt]);
 
     return NextResponse.json({
       success: true,

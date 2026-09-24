@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, execute } from '@/lib/db';
 import { Store, Table, TableSession, BuffetTier, Category, MenuItem, OrderItem } from '@/lib/types';
 import { getBuffetRemainingMinutes, getElapsedMinutes } from '@/lib/utils';
 
@@ -7,7 +7,6 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('store_id');
     const tableId = url.searchParams.get('table_id');
@@ -19,10 +18,10 @@ export async function GET(req: Request) {
     }
 
     // 1. Verify session
-    const session = db.prepare(`
+    const session = await queryOne<TableSession>(`
       SELECT * FROM table_sessions
       WHERE id = ? AND store_id = ? AND table_id = ? AND status = 'active' AND qr_code_token = ?
-    `).get(token, storeId, tableId, token) as unknown as TableSession | undefined;
+    `, [token, storeId, tableId, token]);
 
     if (!session) {
       return NextResponse.json({
@@ -32,32 +31,31 @@ export async function GET(req: Request) {
     }
 
     // 2. Fetch Store & Table
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId) as unknown as Store;
-    const table = db.prepare('SELECT * FROM tables WHERE id = ?').get(tableId) as unknown as Table;
+    const store = await queryOne<Store>('SELECT * FROM stores WHERE id = ?', [storeId]);
+    const table = await queryOne<Table>('SELECT * FROM tables WHERE id = ?', [tableId]);
 
     // 3. Resolve Guest Identity (1-A, 1-B, etc.)
     let currentGuest: Record<string, unknown> | null = null;
     if (existingGuestId) {
-      const found = db.prepare('SELECT * FROM guests WHERE id = ? AND session_id = ?').get(existingGuestId, session.id);
+      const found = await queryOne('SELECT * FROM guests WHERE id = ? AND session_id = ?', [existingGuestId, session.id]);
       if (found) {
         currentGuest = found as Record<string, unknown>;
       }
     }
 
     if (!currentGuest) {
-      // Create next guest code: A, B, C, D...
-      const currentGuests = db.prepare('SELECT * FROM guests WHERE session_id = ? ORDER BY joined_at ASC').all(session.id) as Record<string, unknown>[];
+      const currentGuests = await query<Record<string, unknown>>('SELECT * FROM guests WHERE session_id = ? ORDER BY joined_at ASC', [session.id]);
       const guestLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const nextIndex = currentGuests.length;
       const nextLetter = guestLetters[nextIndex % guestLetters.length] || `G${nextIndex + 1}`;
       const newGuestId = 'g_' + Math.random().toString(36).substring(2, 9);
-      const guestLabel = `${table.table_number}-${nextLetter}`;
+      const guestLabel = `${table?.table_number || 'โต๊ะ'}-${nextLetter}`;
       const now = new Date().toISOString();
 
-      db.prepare(`
+      await execute(`
         INSERT INTO guests (id, session_id, guest_code, guest_label, nickname, joined_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(newGuestId, session.id, nextLetter, guestLabel, `ผู้ร่วมโต๊ะ ${nextLetter}`, now);
+      `, [newGuestId, session.id, nextLetter, guestLabel, `ผู้ร่วมโต๊ะ ${nextLetter}`, now]);
 
       currentGuest = {
         id: newGuestId,
@@ -70,22 +68,22 @@ export async function GET(req: Request) {
     }
 
     // 4. All guests in this table
-    const allGuests = db.prepare('SELECT * FROM guests WHERE session_id = ? ORDER BY joined_at ASC').all(session.id);
+    const allGuests = await query('SELECT * FROM guests WHERE session_id = ? ORDER BY joined_at ASC', [session.id]);
 
     // 5. Buffet Tier info (if buffet)
     let buffetTier: BuffetTier | null = null;
     let buffetRemaining = null;
     if (session.buffet_tier_id) {
-      buffetTier = db.prepare('SELECT * FROM buffet_tiers WHERE id = ?').get(session.buffet_tier_id) as unknown as BuffetTier;
+      buffetTier = await queryOne<BuffetTier>('SELECT * FROM buffet_tiers WHERE id = ?', [session.buffet_tier_id]);
       buffetRemaining = getBuffetRemainingMinutes(session.buffet_end_time);
     }
 
     // 6. Categories & Menu Items
-    const categories = db.prepare('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC').all(storeId) as unknown as Category[];
-    let menuItems = db.prepare('SELECT * FROM menu_items WHERE store_id = ? AND is_available = 1').all(storeId) as unknown as MenuItem[];
+    const categories = await query<Category>('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
+    let menuItems = await query<MenuItem>('SELECT * FROM menu_items WHERE store_id = ? AND is_available = 1', [storeId]);
 
     // If buffet, mark items whether they are included in customer's tier
-    if (store.type === 'buffet' && buffetTier) {
+    if (store?.type === 'buffet' && buffetTier) {
       menuItems = menuItems.map(item => {
         const isIncluded = !item.min_buffet_tier_id || item.min_buffet_tier_id === buffetTier?.id;
         return {
@@ -96,14 +94,14 @@ export async function GET(req: Request) {
     }
 
     // 7. Active Table Orders and Order Items
-    const orderItems = db.prepare(`
+    const orderItems = await query<OrderItem & { image_url?: string; guest_label: string; guest_nickname?: string }>(`
       SELECT oi.*, m.image_url, g.guest_label, g.nickname as guest_nickname
       FROM order_items oi
       LEFT JOIN menu_items m ON oi.menu_item_id = m.id
       LEFT JOIN guests g ON oi.guest_id = g.id
       WHERE oi.session_id = ?
       ORDER BY oi.created_at DESC
-    `).all(session.id) as unknown as (OrderItem & { image_url?: string })[];
+    `, [session.id]);
 
     // 8. Individual totals breakdown
     const guestSpendMap: Record<string, { guest_label: string; nickname: string; total: number; count: number }> = {};
@@ -117,7 +115,7 @@ export async function GET(req: Request) {
     }
 
     let grandTotal = 0;
-    if (store.type === 'buffet' && buffetTier) {
+    if (store?.type === 'buffet' && buffetTier) {
       grandTotal = (session.guest_count || 1) * Number(buffetTier.price);
     }
 
@@ -156,10 +154,9 @@ export async function GET(req: Request) {
   }
 }
 
-// Update guest nickname (e.g. customer changes "โต๊ะ 1-A" nickname to "พี่ต้น")
+// Update guest nickname
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
     const { guest_id, nickname } = body;
 
@@ -167,7 +164,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing guest_id or nickname' }, { status: 400 });
     }
 
-    db.prepare('UPDATE guests SET nickname = ? WHERE id = ?').run(nickname, guest_id);
+    await execute('UPDATE guests SET nickname = ? WHERE id = ?', [nickname, guest_id]);
     return NextResponse.json({ success: true, nickname });
   } catch (error) {
     console.error('Failed to update nickname:', error);

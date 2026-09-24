@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, execute } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('id');
 
     if (storeId) {
-      const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId);
+      const store = await queryOne('SELECT * FROM stores WHERE id = ?', [storeId]);
       if (!store) {
         return NextResponse.json({ error: 'Store not found' }, { status: 404 });
       }
       return NextResponse.json(store);
     }
 
-    const stores = db.prepare('SELECT * FROM stores ORDER BY created_at DESC').all();
+    const stores = await query('SELECT * FROM stores ORDER BY created_at DESC');
     return NextResponse.json(stores);
   } catch (error) {
     console.error('Failed to get stores:', error);
@@ -34,7 +33,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Store name is required' }, { status: 400 });
     }
 
-    const db = getDb();
     const id = 'store_' + Math.random().toString(36).substring(2, 9);
     const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
     const now = new Date().toISOString();
@@ -48,12 +46,12 @@ export async function POST(req: Request) {
       expireDate.setDate(expireDate.getDate() + 30);
     }
 
-    db.prepare(`
+    await execute(`
       INSERT INTO stores (
         id, name, slug, type, logo_url, cover_url, phone, address, promptpay_number, promptpay_name,
         buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       id,
       name,
       slug,
@@ -70,37 +68,35 @@ export async function POST(req: Request) {
       expireDate.toISOString(),
       'active',
       now
-    );
+    ]);
 
     // Create default staff
-    db.prepare(`
-      INSERT INTO store_staff (id, store_id, name, pin, role, is_active)
-      VALUES
-        (?, ?, 'เจ้าของร้าน', '1111', 'owner', 1),
-        (?, ?, 'แคชเชียร์', '3333', 'cashier', 1),
-        (?, ?, 'ห้องครัว', '4444', 'kitchen', 1)
-    `).run(
-      'stf_' + Math.random().toString(36).substring(2, 7), id,
-      'stf_' + Math.random().toString(36).substring(2, 7), id,
-      'stf_' + Math.random().toString(36).substring(2, 7), id
-    );
+    const stf1 = 'stf_' + Math.random().toString(36).substring(2, 7);
+    const stf2 = 'stf_' + Math.random().toString(36).substring(2, 7);
+    const stf3 = 'stf_' + Math.random().toString(36).substring(2, 7);
+
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf1, id, 'เจ้าของร้าน', '1111', 'owner']);
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf2, id, 'แคชเชียร์', '3333', 'cashier']);
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf3, id, 'ห้องครัว', '4444', 'kitchen']);
 
     // Create 4 initial tables
     for (let i = 1; i <= 4; i++) {
-      db.prepare(`
+      await execute(`
         INSERT INTO tables (id, store_id, table_number, zone, capacity, status)
         VALUES (?, ?, ?, 'โซนหลัก', 4, 'available')
-      `).run('tbl_' + id + '_' + i, id, 'โต๊ะ ' + i);
+      `, ['tbl_' + id + '_' + i, id, 'โต๊ะ ' + i]);
     }
 
     // If buffet, create default tiers
     if (type === 'buffet') {
-      db.prepare(`
+      await execute(`
         INSERT INTO buffet_tiers (id, store_id, name, price, description, color, sort_order)
-        VALUES
-          (?, ?, 'Standard Buffet', 399, 'เมนูมาตรฐาน', '#3b82f6', 1),
-          (?, ?, 'Premium Buffet', 499, 'เมนูพรีเมียม ซีฟู้ด และเนื้อพิเศษ', '#eab308', 2)
-      `).run('tier_' + id + '_std', id, 'tier_' + id + '_prm', id);
+        VALUES (?, ?, 'Standard Buffet', 399, 'เมนูมาตรฐาน', '#3b82f6', 1)
+      `, ['tier_' + id + '_std', id]);
+      await execute(`
+        INSERT INTO buffet_tiers (id, store_id, name, price, description, color, sort_order)
+        VALUES (?, ?, 'Premium Buffet', 499, 'เมนูพรีเมียม ซีฟู้ด และเนื้อพิเศษ', '#eab308', 2)
+      `, ['tier_' + id + '_prm', id]);
     }
 
     return NextResponse.json({ success: true, store_id: id });

@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query } from '@/lib/db';
 import { getElapsedMinutes, getBuffetRemainingMinutes } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('store_id');
 
@@ -14,7 +13,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
     }
 
-    const tables = db.prepare(`
+    const tables = await query<Record<string, unknown>>(`
       SELECT t.*,
              ts.id as session_id,
              ts.opened_at,
@@ -30,23 +29,22 @@ export async function GET(req: Request) {
       LEFT JOIN buffet_tiers bt ON ts.buffet_tier_id = bt.id
       WHERE t.store_id = ?
       ORDER BY t.zone ASC, t.table_number ASC
-    `).all(storeId) as Record<string, unknown>[];
+    `, [storeId]);
 
-    const result = tables.map((tbl) => {
+    const result = await Promise.all(tables.map(async (tbl) => {
       let activeOrderCount = 0;
       let totalSpend = 0;
       let orderItems: unknown[] = [];
       let guestCount = Number(tbl.guest_count || 0);
 
       if (tbl.session_id) {
-        // Calculate total spend and items
-        const items = db.prepare(`
+        const items = await query<Record<string, unknown>>(`
           SELECT oi.*, m.image_url
           FROM order_items oi
           LEFT JOIN menu_items m ON oi.menu_item_id = m.id
           WHERE oi.session_id = ?
           ORDER BY oi.created_at DESC
-        `).all(tbl.session_id as string) as Record<string, unknown>[];
+        `, [tbl.session_id as string]);
 
         orderItems = items;
         activeOrderCount = items.length;
@@ -54,12 +52,11 @@ export async function GET(req: Request) {
         // If buffet, calculate guest_count * buffet price + any extra items
         if (tbl.buffet_tier_price) {
           totalSpend = guestCount * Number(tbl.buffet_tier_price);
-          // add any non-buffet paid items if any
           for (const itm of items) {
             totalSpend += Number(itm.price || 0) * Number(itm.quantity || 1);
           }
         } else {
-          // A la carte: sum of order item price * quantity
+          // A la carte
           for (const itm of items) {
             totalSpend += Number(itm.price || 0) * Number(itm.quantity || 1);
           }
@@ -96,7 +93,7 @@ export async function GET(req: Request) {
             }
           : null,
       };
-    });
+    }));
 
     return NextResponse.json(result);
   } catch (error) {

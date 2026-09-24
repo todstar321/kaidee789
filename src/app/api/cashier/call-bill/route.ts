@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { execute } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
-    const { table_id, session_id } = body;
+    const { table_id } = body;
 
     if (!table_id) {
       return NextResponse.json({ error: 'Missing table_id' }, { status: 400 });
     }
 
-    db.prepare("UPDATE tables SET status = 'billing_requested' WHERE id = ?").run(table_id);
+    await execute("UPDATE tables SET status = 'billing_requested' WHERE id = ?", [table_id]);
 
     return NextResponse.json({
       success: true,

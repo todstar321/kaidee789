@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, execute } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const db = getDb();
-    const admins = db.prepare('SELECT id, username, name, role, permissions, created_at FROM super_admins ORDER BY created_at ASC').all();
+    const admins = await query('SELECT id, username, name, role, permissions, created_at FROM super_admins ORDER BY created_at ASC');
     return NextResponse.json(admins);
   } catch (error) {
     console.error('Failed to get super admins:', error);
@@ -14,7 +15,6 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const db = getDb();
     const body = await req.json();
     const { username, password, name, permissions } = body;
 
@@ -25,17 +25,17 @@ export async function POST(req: Request) {
     const id = 'sa_' + Math.random().toString(36).substring(2, 9);
     const now = new Date().toISOString();
 
-    db.prepare(`
+    await execute(`
       INSERT INTO super_admins (id, username, password, name, role, permissions, created_at)
       VALUES (?, ?, ?, ?, 'assistant', ?, ?)
-    `).run(
+    `, [
       id,
       username,
       password,
       name,
       JSON.stringify(permissions || ['manage_stores', 'verify_slips', 'impersonate']),
       now
-    );
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -50,7 +50,6 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const db = getDb();
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
@@ -58,12 +57,12 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const admin = db.prepare('SELECT role FROM super_admins WHERE id = ?').get(id) as { role: string } | undefined;
+    const admin = await queryOne<{ role: string }>('SELECT role FROM super_admins WHERE id = ?', [id]);
     if (admin && admin.role === 'owner') {
       return NextResponse.json({ error: 'ไม่สามารถลบแอดมินหลัก (Owner) ได้' }, { status: 400 });
     }
 
-    db.prepare('DELETE FROM super_admins WHERE id = ?').run(id);
+    await execute('DELETE FROM super_admins WHERE id = ?', [id]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete assistant:', error);
