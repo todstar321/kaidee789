@@ -1200,6 +1200,7 @@ export default function CashierPage({ params }: { params: { storeId: string } })
             </div>
 
             <div className="space-y-2">
+              {/* Print full page A4 */}
               <button
                 onClick={() => {
                   if (!completedInvoice) return;
@@ -1222,13 +1223,45 @@ export default function CashierPage({ params }: { params: { storeId: string } })
                     paymentMethod: completedInvoice.payment_method,
                     cashReceived: completedInvoice.cash_received,
                     changeGiven: completedInvoice.change_given,
-                  });
-                  printReceiptHtml(html, `ใบเสร็จ_${completedInvoice.invoice_id}`);
+                  }, 'a4');
+                  printReceiptHtml(html, `ใบเสร็จ_${completedInvoice.invoice_id}`, 'a4');
                 }}
-                className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
+                className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow"
               >
                 <Printer className="w-4 h-4" />
-                <span>พิมพ์ใบเสร็จรับเงิน (Thermal 58mm/80mm)</span>
+                <span>📄 พิมพ์ใบเสร็จเต็มหน้ากระดาษ (A4 / ทั่วไป)</span>
+              </button>
+
+              {/* Print thermal roll */}
+              <button
+                onClick={() => {
+                  if (!completedInvoice) return;
+                  const html = renderInvoiceReceiptHtml({
+                    storeName: store?.name,
+                    storeAddress: store?.address,
+                    storePhone: store?.phone,
+                    invoiceId: completedInvoice.invoice_id,
+                    tableNumber: completedInvoice.table_number,
+                    paidAt: completedInvoice.paid_at,
+                    memberName: completedInvoice.member_name,
+                    buffetDetails: completedInvoice.buffet_details,
+                    items: completedInvoice.items,
+                    subtotal: completedInvoice.subtotal,
+                    discountAmount: completedInvoice.discount_amount,
+                    discountDetails: completedInvoice.discount_details,
+                    serviceCharge: completedInvoice.service_charge,
+                    vatAmount: completedInvoice.vat_amount,
+                    grandTotal: completedInvoice.grand_total,
+                    paymentMethod: completedInvoice.payment_method,
+                    cashReceived: completedInvoice.cash_received,
+                    changeGiven: completedInvoice.change_given,
+                  }, 'thermal');
+                  printReceiptHtml(html, `ใบเสร็จ_${completedInvoice.invoice_id}`, 'thermal');
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition border border-slate-300"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+                <span>🧾 พิมพ์สลิปใบเสร็จ (Thermal 80mm)</span>
               </button>
 
               <button

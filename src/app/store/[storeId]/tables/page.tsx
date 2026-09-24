@@ -375,7 +375,7 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
     setViewQrDataUrl(qrImage);
   };
 
-  const handlePrintJustOpenedSlip = () => {
+  const handlePrintJustOpenedSlip = (format: 'a4' | 'thermal' = 'a4') => {
     if (!justOpenedSession) return;
     const html = renderTableSlipHtml({
       storeName: store?.name,
@@ -384,11 +384,11 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
       openedAt: new Date().toISOString(),
       guestCount: openGuestCount,
       memberName: justOpenedSession.memberName,
-    });
-    printReceiptHtml(html, `ใบเปิดโต๊ะ_${justOpenedSession.tableNumber}`);
+    }, format);
+    printReceiptHtml(html, `ใบเปิดโต๊ะ_${justOpenedSession.tableNumber}`, format);
   };
 
-  const handlePrintViewQrSlip = () => {
+  const handlePrintViewQrSlip = (format: 'a4' | 'thermal' = 'a4') => {
     if (!viewQrModalTarget) return;
     const html = renderTableSlipHtml({
       storeName: store?.name,
@@ -398,8 +398,8 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
       openedAt: viewQrModalTarget.session?.opened_at,
       guestCount: viewQrModalTarget.session?.guest_count,
       memberName: viewQrModalTarget.session?.member_name || undefined,
-    });
-    printReceiptHtml(html, `ใบเปิดโต๊ะ_${viewQrModalTarget.table_number}`);
+    }, format);
+    printReceiptHtml(html, `ใบเปิดโต๊ะ_${viewQrModalTarget.table_number}`, format);
   };
 
   // Distinct zones
@@ -1440,11 +1440,19 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </a>
 
               <button
-                onClick={handlePrintJustOpenedSlip}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                onClick={() => handlePrintJustOpenedSlip('a4')}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>พิมพ์ใบเปิดโต๊ะ (Slip 58mm/80mm)</span>
+                <span>📄 พิมพ์เต็มหน้ากระดาษ (A4 / ทั่วไป)</span>
+              </button>
+
+              <button
+                onClick={() => handlePrintJustOpenedSlip('thermal')}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-slate-300"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                <span>🧾 พิมพ์สลิปม้วน (Thermal 80mm)</span>
               </button>
 
               <button
@@ -1495,11 +1503,19 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </a>
 
               <button
-                onClick={handlePrintViewQrSlip}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                onClick={() => handlePrintViewQrSlip('a4')}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>พิมพ์ใบเปิดโต๊ะ (Slip 58mm/80mm)</span>
+                <span>📄 พิมพ์เต็มหน้ากระดาษ (A4 / ทั่วไป)</span>
+              </button>
+
+              <button
+                onClick={() => handlePrintViewQrSlip('thermal')}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-slate-300"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                <span>🧾 พิมพ์สลิปม้วน (Thermal 80mm)</span>
               </button>
 
               <button

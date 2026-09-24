@@ -153,28 +153,51 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
 
           {/* Bulk print button */}
           {items.length > 0 && (
-            <button
-              onClick={() => {
-                const html = renderKitchenTicketHtml({
-                  storeName: 'สรุปรายการอาหารทั้งหมดในครัว (KDS)',
-                  tableTitle: `รวมทุกโต๊ะ (${items.length} จาน)`,
-                  time: new Date().toISOString(),
-                  items: items.map(i => ({
-                    item_name: `${i.table_number}: ${i.item_name}`,
-                    quantity: i.quantity,
-                    guest_label: i.guest_label,
-                    guest_nickname: i.guest_nickname,
-                    notes: i.notes,
-                  })),
-                });
-                printReceiptHtml(html, 'สรุปออเดอร์ทั้งหมดในครัว');
-              }}
-              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-              title="พิมพ์ตั๋วสรุปรายการอาหารทั้งหมดที่ค้างอยู่ในครัว"
-            >
-              <Printer className="w-4 h-4 text-orange-400" />
-              <span>พิมพ์ทั้งหมด ({items.length})</span>
-            </button>
+            <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+              <button
+                onClick={() => {
+                  const html = renderKitchenTicketHtml({
+                    storeName: 'สรุปรายการอาหารทั้งหมดในครัว (KDS)',
+                    tableTitle: `รวมทุกโต๊ะ (${items.length} จาน)`,
+                    time: new Date().toISOString(),
+                    items: items.map(i => ({
+                      item_name: `${i.table_number}: ${i.item_name}`,
+                      quantity: i.quantity,
+                      guest_label: i.guest_label,
+                      guest_nickname: i.guest_nickname,
+                      notes: i.notes,
+                    })),
+                  }, 'a4');
+                  printReceiptHtml(html, 'สรุปออเดอร์ทั้งหมดในครัว', 'a4');
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 text-slate-200 hover:text-white hover:bg-slate-700 transition"
+                title="พิมพ์แบบเต็มหน้ากระดาษ A4"
+              >
+                <Printer className="w-3.5 h-3.5 text-orange-400" />
+                <span>พิมพ์ A4 ({items.length})</span>
+              </button>
+              <button
+                onClick={() => {
+                  const html = renderKitchenTicketHtml({
+                    storeName: 'สรุปรายการอาหารทั้งหมดในครัว (KDS)',
+                    tableTitle: `รวมทุกโต๊ะ (${items.length} จาน)`,
+                    time: new Date().toISOString(),
+                    items: items.map(i => ({
+                      item_name: `${i.table_number}: ${i.item_name}`,
+                      quantity: i.quantity,
+                      guest_label: i.guest_label,
+                      guest_nickname: i.guest_nickname,
+                      notes: i.notes,
+                    })),
+                  }, 'thermal');
+                  printReceiptHtml(html, 'สรุปออเดอร์ทั้งหมดในครัว', 'thermal');
+                }}
+                className="px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition"
+                title="พิมพ์แบบสลิปม้วน Thermal 80mm"
+              >
+                <span>สลิป 80mm</span>
+              </button>
+            </div>
           )}
 
           <button
@@ -260,28 +283,51 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    const html = renderKitchenTicketHtml({
-                      storeName: 'ตั๋วออเดอร์เข้าครัว (KDS)',
-                      tableTitle,
-                      time: groupItems[0]?.created_at,
-                      items: groupItems.map(i => ({
-                        item_name: i.item_name,
-                        quantity: i.quantity,
-                        guest_label: i.guest_label,
-                        guest_nickname: i.guest_nickname,
-                        notes: i.notes,
-                      })),
-                    });
-                    printReceiptHtml(html, `ตั๋วครัว_${tableTitle}`);
-                  }}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5"
-                  title="พิมพ์ตั๋วครัวของโต๊ะนี้"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span className="text-[11px] font-bold">พิมพ์ตั๋ว</span>
-                </button>
+                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                  <button
+                    onClick={() => {
+                      const html = renderKitchenTicketHtml({
+                        storeName: 'ตั๋วออเดอร์เข้าครัว (KDS)',
+                        tableTitle,
+                        time: groupItems[0]?.created_at,
+                        items: groupItems.map(i => ({
+                          item_name: i.item_name,
+                          quantity: i.quantity,
+                          guest_label: i.guest_label,
+                          guest_nickname: i.guest_nickname,
+                          notes: i.notes,
+                        })),
+                      }, 'a4');
+                      printReceiptHtml(html, `ตั๋วครัว_${tableTitle}`, 'a4');
+                    }}
+                    className="px-2 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white transition flex items-center gap-1 text-[11px] font-bold shadow-sm"
+                    title="พิมพ์ตั๋วแบบเต็มหน้ากระดาษ A4"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>A4</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const html = renderKitchenTicketHtml({
+                        storeName: 'ตั๋วออเดอร์เข้าครัว (KDS)',
+                        tableTitle,
+                        time: groupItems[0]?.created_at,
+                        items: groupItems.map(i => ({
+                          item_name: i.item_name,
+                          quantity: i.quantity,
+                          guest_label: i.guest_label,
+                          guest_nickname: i.guest_nickname,
+                          notes: i.notes,
+                        })),
+                      }, 'thermal');
+                      printReceiptHtml(html, `ตั๋วครัว_${tableTitle}`, 'thermal');
+                    }}
+                    className="px-2 py-1 rounded-lg hover:bg-slate-700 text-slate-300 hover:text-white transition text-[11px] font-medium"
+                    title="พิมพ์ตั๋วแบบสลิปม้วน Thermal 80mm"
+                  >
+                    <span>สลิป</span>
+                  </button>
+                </div>
               </div>
 
               {/* Ticket Items */}
