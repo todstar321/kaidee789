@@ -121,6 +121,18 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
   const [assigningStaff, setAssigningStaff] = useState(false);
   const commonStaffList = ['น้องฟ้า', 'น้องน้ำ', 'น้องฟิล์ม', 'น้องมุก', 'พี่เอก (กัปตัน)', 'พี่สมชาย (ผู้จัดการ)'];
 
+  // Edit Customer on Already-Opened Table Modal State
+  const [editOpenTableCustomerTarget, setEditOpenTableCustomerTarget] = useState<TableWithDetails | null>(null);
+  const [editCustomerType, setEditCustomerType] = useState<'walkin' | 'member'>('walkin');
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerNickname, setEditCustomerNickname] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerSelectedMember, setEditCustomerSelectedMember] = useState<Member | null>(null);
+  const [editCustomerSearchQuery, setEditCustomerSearchQuery] = useState('');
+  const [editCustomerSearchResults, setEditCustomerSearchResults] = useState<Member[]>([]);
+  const [isSearchingEditCustomer, setIsSearchingEditCustomer] = useState(false);
+  const [isSavingOpenTableCustomer, setIsSavingOpenTableCustomer] = useState(false);
+
   // Post-open modal
   const [justOpenedSession, setJustOpenedSession] = useState<{
     tableNumber: string;
@@ -299,6 +311,125 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
       alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
     } finally {
       setIsSavingMemberEdit(false);
+    }
+  };
+
+  // Open Table Customer Edit Handlers
+  const handleOpenEditTableCustomer = (tbl: TableWithDetails) => {
+    setEditOpenTableCustomerTarget(tbl);
+    const sess = tbl.session;
+    if (sess?.member_id) {
+      setEditCustomerType('member');
+      setEditCustomerSelectedMember({
+        id: sess.member_id,
+        name: sess.member_name || '',
+        nickname: sess.member_nickname || '',
+        phone: sess.member_phone || '',
+      } as Member);
+      setEditCustomerName(sess.member_name || '');
+      setEditCustomerNickname(sess.member_nickname || '');
+      setEditCustomerPhone(sess.member_phone || '');
+    } else {
+      setEditCustomerType('walkin');
+      setEditCustomerSelectedMember(null);
+      setEditCustomerName(sess?.member_name || '');
+      setEditCustomerNickname(sess?.member_nickname || '');
+      setEditCustomerPhone(sess?.member_phone || '');
+    }
+    setEditCustomerSearchQuery('');
+    setEditCustomerSearchResults([]);
+  };
+
+  const handleSearchEditCustomer = async (queryStr: string) => {
+    setEditCustomerSearchQuery(queryStr);
+    if (!queryStr.trim() || queryStr.trim().length < 2) {
+      setEditCustomerSearchResults([]);
+      return;
+    }
+    setIsSearchingEditCustomer(true);
+    try {
+      const res = await fetch(`/api/members?store_id=${params.storeId}&q=${encodeURIComponent(queryStr.trim())}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setEditCustomerSearchResults(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSearchingEditCustomer(false);
+    }
+  };
+
+  const handleSaveOpenTableCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editOpenTableCustomerTarget || !editOpenTableCustomerTarget.session) return;
+
+    setIsSavingOpenTableCustomer(true);
+    try {
+      const isMember = editCustomerType === 'member';
+      const mId = isMember ? editCustomerSelectedMember?.id || null : null;
+      const mName = isMember ? (editCustomerSelectedMember?.name || editCustomerName) : editCustomerName;
+      const mNick = isMember ? (editCustomerSelectedMember?.nickname || editCustomerNickname) : editCustomerNickname;
+      const mPhone = isMember ? (editCustomerSelectedMember?.phone || editCustomerPhone) : editCustomerPhone;
+
+      const res = await fetch('/api/tables/customer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: params.storeId,
+          table_id: editOpenTableCustomerTarget.id,
+          session_id: editOpenTableCustomerTarget.session.id,
+          member_id: mId,
+          member_name: mName?.trim() || null,
+          member_nickname: mNick?.trim() || null,
+          member_phone: mPhone?.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditOpenTableCustomerTarget(null);
+        await fetchTables();
+      } else {
+        alert(data.error || 'บันทึกข้อมูลไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } finally {
+      setIsSavingOpenTableCustomer(false);
+    }
+  };
+
+  const handleClearOpenTableCustomer = async () => {
+    if (!editOpenTableCustomerTarget || !editOpenTableCustomerTarget.session) return;
+    if (!confirm(`ต้องการยกเลิกการระบุชื่อลูกค้าของโต๊ะ ${editOpenTableCustomerTarget.table_number} ใช่หรือไม่?`)) return;
+
+    setIsSavingOpenTableCustomer(true);
+    try {
+      const res = await fetch('/api/tables/customer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: params.storeId,
+          table_id: editOpenTableCustomerTarget.id,
+          session_id: editOpenTableCustomerTarget.session.id,
+          member_id: null,
+          member_name: null,
+          member_nickname: null,
+          member_phone: null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditOpenTableCustomerTarget(null);
+        await fetchTables();
+      } else {
+        alert(data.error || 'ยกเลิกชื่อลูกค้าไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingOpenTableCustomer(false);
     }
   };
 
@@ -513,18 +644,38 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </div>
 
               {/* Member badge if assigned */}
-              {tbl.session?.member_name && (
-                <div className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md mt-1.5 inline-flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>{tbl.session.member_name}</span>
-                  {tbl.session.member_nickname && (
-                    <span className="text-amber-700">({tbl.session.member_nickname})</span>
-                  )}
-                  {tbl.session.member_phone && (
-                    <span className="text-slate-400 text-[10px]">({tbl.session.member_phone})</span>
-                  )}
+              {tbl.session?.member_name ? (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditTableCustomer(tbl)}
+                    className="text-[11px] font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition group text-left shadow-xs"
+                    title="คลิกเพื่อแก้ไขชื่อลูกค้าหรือเปลี่ยนสมาชิกโต๊ะนี้"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                    <span>{tbl.session.member_name}</span>
+                    {tbl.session.member_nickname && (
+                      <span className="text-amber-700">({tbl.session.member_nickname})</span>
+                    )}
+                    {tbl.session.member_phone && (
+                      <span className="text-slate-400 text-[10px]">({tbl.session.member_phone})</span>
+                    )}
+                    <Edit2 className="w-2.5 h-2.5 text-amber-600 opacity-60 group-hover:opacity-100 ml-0.5 flex-shrink-0" />
+                  </button>
                 </div>
-              )}
+              ) : isOccupied ? (
+                <div className="mt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditTableCustomer(tbl)}
+                    className="text-[10px] font-medium text-slate-500 hover:text-amber-700 hover:bg-amber-50 border border-dashed border-slate-300 hover:border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition"
+                    title="คลิกเพื่อระบุชื่อลูกค้าหรือสมาชิกที่โต๊ะนี้"
+                  >
+                    <UserPlus className="w-3 h-3 text-slate-400" />
+                    <span>+ ระบุชื่อลูกค้า/สมาชิก</span>
+                  </button>
+                </div>
+              ) : null}
 
               {/* Staff Assigned to Table badge */}
               <div className="mt-1">
@@ -1667,12 +1818,234 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </button>
 
               <button
+                onClick={() => {
+                  const target = viewQrModalTarget;
+                  setViewQrModalTarget(null);
+                  handleOpenEditTableCustomer(target);
+                }}
+                className="w-full py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1.5 transition border border-amber-200"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                <span>✏️ แก้ไขชื่อลูกค้า / สมาชิกประจำโต๊ะนี้</span>
+              </button>
+
+              <button
                 onClick={() => setViewQrModalTarget(null)}
                 className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
               >
                 ปิดหน้าต่าง
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT CUSTOMER ON ALREADY-OPENED ACTIVE TABLE */}
+      {editOpenTableCustomerTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-orange-600" />
+                  <span>แก้ไขข้อมูลลูกค้า: {editOpenTableCustomerTarget.table_number}</span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {editOpenTableCustomerTarget.zone} • กำลังเปิดใช้งาน
+                </p>
+              </div>
+              <button
+                onClick={() => setEditOpenTableCustomerTarget(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Type Switcher: Walk-in vs Member */}
+            <div className="flex rounded-xl bg-slate-100 p-1 mb-4 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCustomerType('walkin');
+                  setEditCustomerSelectedMember(null);
+                }}
+                className={cn(
+                  "flex-1 py-1.5 rounded-lg transition",
+                  editCustomerType === 'walkin'
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                ลูกค้าระบุชื่อทั่วไป
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditCustomerType('member')}
+                className={cn(
+                  "flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1",
+                  editCustomerType === 'member'
+                    ? "bg-amber-500 text-white shadow-xs"
+                    : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>สมาชิกร้านค้า (CRM)</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOpenTableCustomer} className="space-y-3.5 text-xs">
+              {editCustomerType === 'walkin' ? (
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      ชื่อลูกค้า (หรือชื่อที่เรียก)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="เช่น คุณสมชาย, โต๊ะกลุ่มเพื่อน"
+                      value={editCustomerName}
+                      onChange={(e) => setEditCustomerName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-orange-500 font-medium"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        ชื่อเล่น (ถ้ามี)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="เช่น พี่ชาย"
+                        value={editCustomerNickname}
+                        onChange={(e) => setEditCustomerNickname(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        เบอร์โทรศัพท์ (ถ้ามี)
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="08X-XXX-XXXX"
+                        value={editCustomerPhone}
+                        onChange={(e) => setEditCustomerPhone(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Member Search & Selection */
+                <div className="space-y-3">
+                  {editCustomerSelectedMember ? (
+                    <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-amber-500" />
+                          <span className="font-extrabold text-slate-900">{editCustomerSelectedMember.name}</span>
+                          {editCustomerSelectedMember.nickname && (
+                            <span className="text-amber-800 font-bold">({editCustomerSelectedMember.nickname})</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditCustomerSelectedMember(null)}
+                          className="text-[11px] text-orange-600 hover:underline font-bold"
+                        >
+                          เปลี่ยนสมาชิก
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-slate-600 space-y-0.5">
+                        <p>เบอร์โทร: <strong className="text-slate-800 font-mono">{editCustomerSelectedMember.phone}</strong></p>
+                        <p>แต้มสะสมปัจจุบัน: <strong className="text-amber-600 font-bold">{editCustomerSelectedMember.points || 0} แต้ม</strong></p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        ค้นหาจากชื่อ หรือ เบอร์โทรศัพท์ลูกค้า
+                      </label>
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="พิมพ์เบอร์โทร หรือ ชื่อลูกค้า..."
+                          value={editCustomerSearchQuery}
+                          onChange={(e) => handleSearchEditCustomer(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-amber-500 text-xs"
+                          autoFocus
+                        />
+                      </div>
+
+                      {isSearchingEditCustomer && (
+                        <p className="text-[11px] text-slate-400 mt-1.5">กำลังค้นหา...</p>
+                      )}
+
+                      {editCustomerSearchResults.length > 0 && (
+                        <div className="mt-2 max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white shadow-sm">
+                          {editCustomerSearchResults.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setEditCustomerSelectedMember(m);
+                                setEditCustomerName(m.name);
+                                setEditCustomerNickname(m.nickname || '');
+                                setEditCustomerPhone(m.phone);
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-amber-50/50 flex items-center justify-between transition text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-slate-900">{m.name}</span>
+                                {m.nickname && <span className="text-slate-500 ml-1">({m.nickname})</span>}
+                                <div className="text-[10px] text-slate-400 font-mono">{m.phone}</div>
+                              </div>
+                              <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                                เลือก
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearOpenTableCustomer}
+                  disabled={isSavingOpenTableCustomer || (!editCustomerName && !editCustomerSelectedMember)}
+                  className="px-3 py-2 rounded-xl text-red-500 hover:bg-red-50 text-[11px] font-semibold transition disabled:opacity-30"
+                  title="ล้างข้อมูลลูกค้าออกจากโต๊ะนี้"
+                >
+                  ล้างชื่อออก
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditOpenTableCustomerTarget(null)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingOpenTableCustomer}
+                    className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-md shadow-orange-600/30 transition disabled:opacity-50"
+                  >
+                    {isSavingOpenTableCustomer ? 'กำลังบันทึก...' : '✓ บันทึกข้อมูลลูกค้า'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

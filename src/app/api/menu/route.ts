@@ -3,6 +3,7 @@ import { query, queryOne, execute } from '@/lib/db';
 import { MenuItem, Category } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
@@ -13,7 +14,25 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
     }
 
-    const categories = await query<Category>('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
+    let categories = await query<Category>('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
+
+    // If store has 0 categories, auto-seed default categories
+    if (categories.length === 0) {
+      const defaultCats = [
+        { id: 'cat_' + Math.random().toString(36).substring(2, 9), name: '🔥 เมนูแนะนำยอดฮิต', icon: 'Flame', sort_order: 1 },
+        { id: 'cat_' + Math.random().toString(36).substring(2, 9), name: '🍲 ต้ม / แกง / ซุป', icon: 'Soup', sort_order: 2 },
+        { id: 'cat_' + Math.random().toString(36).substring(2, 9), name: '🍳 ผัด / ทอด / จานเดียว', icon: 'Utensils', sort_order: 3 },
+        { id: 'cat_' + Math.random().toString(36).substring(2, 9), name: '🥤 เครื่องดื่ม & ของหวาน', icon: 'Coffee', sort_order: 4 },
+      ];
+      for (const dc of defaultCats) {
+        await execute(
+          'INSERT INTO categories (id, store_id, name, icon, sort_order) VALUES (?, ?, ?, ?, ?)',
+          [dc.id, storeId, dc.name, dc.icon, dc.sort_order]
+        ).catch(() => {});
+      }
+      categories = await query<Category>('SELECT * FROM categories WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
+    }
+
     const items = await query<MenuItem>('SELECT * FROM menu_items WHERE store_id = ? ORDER BY created_at DESC, name ASC', [storeId]);
     const tiers = await query('SELECT * FROM buffet_tiers WHERE store_id = ? ORDER BY sort_order ASC', [storeId]);
 
@@ -21,6 +40,12 @@ export async function GET(req: Request) {
       categories,
       items,
       buffet_tiers: tiers,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
+      }
     });
   } catch (error) {
     console.error('Failed to get menu:', error);
@@ -37,14 +62,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
     }
 
+    // Add or Create Category
     if (action === 'category') {
       const { name, icon, sort_order } = body;
+      if (!name || !name.trim()) {
+        return NextResponse.json({ error: 'กรุณาระบุชื่อหมวดหมู่อาหาร' }, { status: 400 });
+      }
+
       const id = 'cat_' + Math.random().toString(36).substring(2, 9);
+      const catIcon = icon || 'Utensils';
+      const catOrder = Number(sort_order || 0);
+
       await execute(`
         INSERT INTO categories (id, store_id, name, icon, sort_order)
         VALUES (?, ?, ?, ?, ?)
-      `, [id, store_id, name, icon || 'Utensils', Number(sort_order || 0)]);
-      return NextResponse.json({ success: true, id });
+      `, [id, store_id, name.trim(), catIcon, catOrder]);
+
+      const newCategory = {
+        id,
+        store_id,
+        name: name.trim(),
+        icon: catIcon,
+        sort_order: catOrder,
+      };
+
+      return NextResponse.json({
+        success: true,
+        id,
+        category: newCategory,
+        message: 'เพิ่มหมวดหมู่อาหารเรียบร้อยแล้ว'
+      });
     }
 
     // Add Menu Item
@@ -74,7 +121,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, id, message: 'เพิ่มเมนูอาหารเรียบร้อยแล้ว' });
   } catch (error) {
-    console.error('Failed to create menu item:', error);
+    console.error('Failed to create menu item or category:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
@@ -82,6 +129,27 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
+    const { action } = body;
+
+    // Update Category
+    if (action === 'category') {
+      const { id, store_id, name, icon, sort_order } = body;
+      if (!id || !name || !name.trim()) {
+        return NextResponse.json({ error: 'ID และชื่อหมวดหมู่จำเป็นต้องระบุ' }, { status: 400 });
+      }
+
+      await execute(`
+        UPDATE categories
+        SET name = ?,
+            icon = COALESCE(?, icon),
+            sort_order = COALESCE(?, sort_order)
+        WHERE id = ? AND store_id = ?
+      `, [name.trim(), icon || null, sort_order !== undefined ? Number(sort_order) : null, id, store_id]);
+
+      return NextResponse.json({ success: true, message: 'แก้ไขหมวดหมู่สำเร็จ' });
+    }
+
+    // Update Menu Item
     const { id, name, category_id, description, price, cost_price, cooking_time_mins, image_url, is_available, min_buffet_tier_id } = body;
 
     if (!id) {
@@ -113,9 +181,9 @@ export async function PUT(req: Request) {
       id
     ]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'อัปเดตเมนูอาหารสำเร็จ' });
   } catch (error) {
-    console.error('Failed to update menu item:', error);
+    console.error('Failed to update menu item or category:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
@@ -123,16 +191,28 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const url = new URL(req.url);
-    const id = url.searchParams.get('id');
+    const action = url.searchParams.get('action') || url.searchParams.get('type');
+    const id = url.searchParams.get('id') || url.searchParams.get('category_id');
+    const storeId = url.searchParams.get('store_id');
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
+    // Delete Category
+    if (action === 'category') {
+      if (!storeId) {
+        return NextResponse.json({ error: 'store_id is required' }, { status: 400 });
+      }
+      await execute('DELETE FROM categories WHERE id = ? AND store_id = ?', [id, storeId]);
+      return NextResponse.json({ success: true, message: 'ลบหมวดหมู่เรียบร้อยแล้ว' });
+    }
+
+    // Delete Menu Item
     await execute('DELETE FROM menu_items WHERE id = ?', [id]);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'ลบเมนูเรียบร้อยแล้ว' });
   } catch (error) {
-    console.error('Failed to delete menu item:', error);
+    console.error('Failed to delete menu item or category:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

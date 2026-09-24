@@ -112,6 +112,17 @@ export async function POST(req: Request) {
       `, ['tbl_' + id + '_' + i, id, 'โต๊ะ ' + i]);
     }
 
+    // Create initial categories
+    const initialCats = [
+      { id: 'cat_' + id + '_1', name: '🔥 เมนูแนะนำยอดฮิต', icon: 'Flame', sort_order: 1 },
+      { id: 'cat_' + id + '_2', name: '🍲 ต้ม / แกง / ซุป', icon: 'Soup', sort_order: 2 },
+      { id: 'cat_' + id + '_3', name: '🍳 ผัด / ทอด / จานเดียว', icon: 'Utensils', sort_order: 3 },
+      { id: 'cat_' + id + '_4', name: '🥤 เครื่องดื่ม & ของหวาน', icon: 'Coffee', sort_order: 4 },
+    ];
+    for (const c of initialCats) {
+      await execute('INSERT INTO categories (id, store_id, name, icon, sort_order) VALUES (?, ?, ?, ?, ?)', [c.id, id, c.name, c.icon, c.sort_order]);
+    }
+
     // If buffet, create default tiers
     if (type === 'buffet') {
       await execute(`
