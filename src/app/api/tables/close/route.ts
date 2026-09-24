@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
     await execute(`
       UPDATE tables
-      SET status = 'available', current_session_id = NULL
+      SET status = 'available', current_session_id = NULL, service_call = NULL
       WHERE id = ?
     `, [table_id]);
 

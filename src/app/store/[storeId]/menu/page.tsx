@@ -86,7 +86,7 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
     try {
       if (editingItem) {
         // Update
-        await fetch('/api/menu', {
+        const res = await fetch('/api/menu', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -94,9 +94,14 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
             ...itemForm,
           }),
         });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'แก้ไขเมนูไม่สำเร็จ');
+          return;
+        }
       } else {
         // Create
-        await fetch('/api/menu', {
+        const res = await fetch('/api/menu', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -104,13 +109,19 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
             ...itemForm,
           }),
         });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'เพิ่มเมนูไม่สำเร็จ');
+          return;
+        }
       }
 
       setShowAddModal(false);
       setEditingItem(null);
       fetchMenuData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (err.message || ''));
     }
   };
 

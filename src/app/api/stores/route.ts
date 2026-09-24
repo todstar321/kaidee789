@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { query, queryOne, execute } from '@/lib/db';
+import { query, queryOne, execute, ensureSchema } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
+    await ensureSchema();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('id');
 
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    await ensureSchema();
     const body = await req.json();
     const {
       name,
@@ -42,6 +44,13 @@ export async function POST(req: Request) {
       owner_pin,
       cashier_pin,
       kitchen_pin,
+      custom_price_yearly,
+      custom_price_monthly,
+      discount_percent,
+      trial_months,
+      admin_phone,
+      service_charge_percent,
+      vat_percent,
     } = body;
 
     if (!name) {
@@ -72,8 +81,9 @@ export async function POST(req: Request) {
       INSERT INTO stores (
         id, name, slug, type, logo_url, cover_url, phone, address, promptpay_number, promptpay_name,
         buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at,
-        login_username, login_password
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        login_username, login_password, custom_price_yearly, custom_price_monthly, discount_percent, trial_months, admin_phone,
+        service_charge_percent, vat_percent
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       name,
@@ -92,7 +102,14 @@ export async function POST(req: Request) {
       'active',
       now,
       finalUsername,
-      finalPassword
+      finalPassword,
+      custom_price_yearly !== undefined && custom_price_yearly !== null ? Number(custom_price_yearly) : null,
+      custom_price_monthly !== undefined && custom_price_monthly !== null ? Number(custom_price_monthly) : null,
+      discount_percent ? Number(discount_percent) : 0,
+      trial_months ? Number(trial_months) : 0,
+      admin_phone ? String(admin_phone).trim() : null,
+      service_charge_percent !== undefined ? Number(service_charge_percent) : 10,
+      vat_percent !== undefined ? Number(vat_percent) : 7,
     ]);
 
     // Create default staff with custom PINs

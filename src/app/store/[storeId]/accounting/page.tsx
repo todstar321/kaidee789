@@ -82,19 +82,28 @@ export default function AccountingPage({ params }: { params: { storeId: string }
           notes: '',
         });
         fetchAccounting();
+      } else {
+        alert(data.error || 'บันทึกรายจ่ายไม่สำเร็จ');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (err.message || ''));
     }
   };
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm('ต้องการลบรายการรายจ่ายนี้ใช่หรือไม่?')) return;
     try {
-      await fetch(`/api/accounting?id=${id}`, { method: 'DELETE' });
-      fetchAccounting();
-    } catch (err) {
+      const res = await fetch(`/api/accounting?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchAccounting();
+      } else {
+        alert(data.error || 'ลบรายการไม่สำเร็จ');
+      }
+    } catch (err: any) {
       console.error(err);
+      alert('เกิดข้อผิดพลาดในการลบรายการ');
     }
   };
 

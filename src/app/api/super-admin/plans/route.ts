@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { query, execute } from '@/lib/db';
+import { query, execute, ensureSchema } from '@/lib/db';
 import { SubscriptionPlanConfig } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    await ensureSchema();
     const plans = await query<SubscriptionPlanConfig>(`
       SELECT id, name, price_monthly, price_yearly, price_lifetime, max_tables, features, updated_at
       FROM subscription_plans
@@ -27,6 +28,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    await ensureSchema();
     const body = await req.json();
     const plansToUpdate = Array.isArray(body) ? body : [body];
     const now = new Date().toISOString();

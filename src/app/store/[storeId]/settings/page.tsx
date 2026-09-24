@@ -14,7 +14,8 @@ import {
   Receipt,
   Sparkles,
   Phone,
-  FileText
+  FileText,
+  Percent
 } from 'lucide-react';
 import { Store, SubscriptionPayment } from '@/lib/types';
 import { formatMoney, formatThaiDate } from '@/lib/utils';
@@ -35,6 +36,8 @@ export default function StoreSettingsPage({ params }: { params: { storeId: strin
     promptpay_name: '',
     type: 'alacarte',
     buffet_duration_mins: 120,
+    service_charge_percent: 0,
+    vat_percent: 7,
   });
 
   // Slip Payment Modal
@@ -66,6 +69,8 @@ export default function StoreSettingsPage({ params }: { params: { storeId: strin
           promptpay_name: resStore.promptpay_name || '',
           type: resStore.type || 'alacarte',
           buffet_duration_mins: resStore.buffet_duration_mins || 120,
+          service_charge_percent: resStore.service_charge_percent ?? 0,
+          vat_percent: resStore.vat_percent ?? 7,
         });
       }
       if (Array.isArray(resSlips)) setSlips(resSlips);
@@ -91,11 +96,15 @@ export default function StoreSettingsPage({ params }: { params: { storeId: strin
       const data = await res.json();
       if (data.success) {
         setSaveSuccess(true);
+        alert('✅ บันทึกการตั้งค่าร้านค้าเรียบร้อยแล้ว!');
         setTimeout(() => setSaveSuccess(false), 3000);
         fetchStoreData();
+      } else {
+        alert(data.error || 'บันทึกการตั้งค่าไม่สำเร็จ');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (err.message || ''));
     }
   };
 
@@ -346,6 +355,42 @@ export default function StoreSettingsPage({ params }: { params: { storeId: strin
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-orange-500"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <Percent className="w-3.5 h-3.5 text-blue-600" />
+                <span>Service Charge (%)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={form.service_charge_percent}
+                onChange={(e) => setForm({ ...form, service_charge_percent: Number(e.target.value) || 0 })}
+                placeholder="เช่น 10 (หากไม่มีให้ใส่ 0)"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-orange-500"
+              />
+              <span className="text-[10px] text-slate-400">ระบบแคชเชียร์จะคิด Service Charge เพิ่มตาม % นี้</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <Percent className="w-3.5 h-3.5 text-emerald-600" />
+                <span>VAT ภาษีมูลค่าเพิ่ม (%)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={form.vat_percent}
+                onChange={(e) => setForm({ ...form, vat_percent: Number(e.target.value) || 0 })}
+                placeholder="เช่น 7 (หากไม่มีให้ใส่ 0)"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-orange-500"
+              />
+              <span className="text-[10px] text-slate-400">ระบบแคชเชียร์และใบเสร็จจะคำนวณ VAT ตาม % นี้</span>
             </div>
           </div>
 

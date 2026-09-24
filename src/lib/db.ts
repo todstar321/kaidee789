@@ -96,9 +96,11 @@ export async function ensureSchema(): Promise<void> {
         price_lifetime INTEGER NOT NULL,
         max_tables INTEGER NOT NULL,
         features TEXT NOT NULL,
-        is_active INTEGER DEFAULT 1
+        is_active INTEGER DEFAULT 1,
+        updated_at TEXT
       );
     `).catch(() => {});
+    await client.execute("ALTER TABLE subscription_plans ADD COLUMN updated_at TEXT;").catch(() => {});
 
     // Seed default subscription plans if empty
     const planRows = await client.execute("SELECT count(*) as count FROM subscription_plans;").catch(() => ({ rows: [] }));

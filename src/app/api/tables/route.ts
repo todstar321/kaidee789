@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, queryOne, execute, ensureSchema } from '@/lib/db';
 import { getElapsedMinutes, getBuffetRemainingMinutes } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -152,6 +152,115 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error('Failed to get tables:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// Add new table
+export async function POST(req: Request) {
+  try {
+    await ensureSchema();
+    const body = await req.json();
+    const { store_id, table_number, zone, capacity } = body;
+
+    if (!store_id || !table_number?.trim()) {
+      return NextResponse.json({ error: 'กรุณาระบุ store_id และหมายเลขโต๊ะ' }, { status: 400 });
+    }
+
+    const cleanNumber = String(table_number).trim();
+    const cleanZone = zone ? String(zone).trim() : 'โซนหลัก';
+    const cleanCap = Number(capacity) > 0 ? Number(capacity) : 4;
+
+    // Check duplicate table number in same store
+    const existing = await queryOne<{ id: string }>('SELECT id FROM tables WHERE store_id = ? AND table_number = ?', [store_id, cleanNumber]);
+    if (existing) {
+      return NextResponse.json({ error: `หมายเลขโต๊ะ "${cleanNumber}" มีอยู่ในระบบแล้ว` }, { status: 400 });
+    }
+
+    const id = 'tbl_' + Math.random().toString(36).substring(2, 9);
+    await execute(`
+      INSERT INTO tables (id, store_id, table_number, zone, capacity, status)
+      VALUES (?, ?, ?, ?, ?, 'available')
+    `, [id, store_id, cleanNumber, cleanZone, cleanCap]);
+
+    return NextResponse.json({
+      success: true,
+      id,
+      table_number: cleanNumber,
+      zone: cleanZone,
+      capacity: cleanCap,
+      message: `เพิ่มโต๊ะ "${cleanNumber}" เรียบร้อยแล้ว`,
+    });
+  } catch (error: any) {
+    console.error('Failed to add table:', error);
+    return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// Update table details (table number, zone, capacity, assigned_staff)
+export async function PUT(req: Request) {
+  try {
+    await ensureSchema();
+    const body = await req.json();
+    const { id, store_id, table_number, zone, capacity, assigned_staff } = body;
+
+    if (!id || !store_id) {
+      return NextResponse.json({ error: 'id and store_id are required' }, { status: 400 });
+    }
+
+    const table = await queryOne<{ id: string }>('SELECT id FROM tables WHERE id = ? AND store_id = ?', [id, store_id]);
+    if (!table) {
+      return NextResponse.json({ error: 'ไม่พบข้อมูลโต๊ะนี้' }, { status: 404 });
+    }
+
+    const cleanNumber = table_number ? String(table_number).trim() : null;
+    const cleanZone = zone ? String(zone).trim() : null;
+    const cleanCap = capacity !== undefined ? Number(capacity) : null;
+    const cleanStaff = assigned_staff !== undefined ? String(assigned_staff).trim() : null;
+
+    await execute(`
+      UPDATE tables
+      SET table_number = COALESCE(?, table_number),
+          zone = COALESCE(?, zone),
+          capacity = COALESCE(?, capacity),
+          assigned_staff = COALESCE(?, assigned_staff)
+      WHERE id = ? AND store_id = ?
+    `, [cleanNumber, cleanZone, cleanCap, cleanStaff, id, store_id]);
+
+    return NextResponse.json({
+      success: true,
+      message: 'อัปเดตข้อมูลโต๊ะสำเร็จ',
+    });
+  } catch (error: any) {
+    console.error('Failed to update table:', error);
+    return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+// Delete table
+export async function DELETE(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id');
+    const storeId = url.searchParams.get('store_id');
+
+    if (!id || !storeId) {
+      return NextResponse.json({ error: 'id and store_id are required' }, { status: 400 });
+    }
+
+    const table = await queryOne<{ status: string; current_session_id?: string }>('SELECT status, current_session_id FROM tables WHERE id = ? AND store_id = ?', [id, storeId]);
+    if (!table) {
+      return NextResponse.json({ error: 'ไม่พบโต๊ะนี้' }, { status: 404 });
+    }
+
+    if (table.current_session_id || table.status === 'occupied') {
+      return NextResponse.json({ error: 'ไม่สามารถลบโต๊ะที่กำลังเปิดให้บริการอยู่ได้ กรุณาปิดโต๊ะหรือคิดเงินก่อน' }, { status: 400 });
+    }
+
+    await execute('DELETE FROM tables WHERE id = ? AND store_id = ?', [id, storeId]);
+    return NextResponse.json({ success: true, message: 'ลบโต๊ะเรียบร้อยแล้ว' });
+  } catch (error) {
+    console.error('Failed to delete table:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

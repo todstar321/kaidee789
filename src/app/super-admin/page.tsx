@@ -72,6 +72,8 @@ export default function SuperAdminPage() {
     calculated_monthly_price: 325,
   });
   const [savingAdminSettings, setSavingAdminSettings] = useState(false);
+  const [showQuickSettingsModal, setShowQuickSettingsModal] = useState(false);
+  const [adminSettingsSavedTime, setAdminSettingsSavedTime] = useState<string | null>(null);
 
   // Store Edit Modal State (Edit name, logo, phone, pricing, trial, discounts)
   const [editingStoreModal, setEditingStoreModal] = useState<{
@@ -285,8 +287,8 @@ export default function SuperAdminPage() {
     }
   };
 
-  const handleSaveAdminSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveAdminSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSavingAdminSettings(true);
     try {
       const res = await fetch('/api/super-admin/settings', {
@@ -297,7 +299,12 @@ export default function SuperAdminPage() {
       const data = await res.json();
       if (data.success && data.settings) {
         setAdminSettings(data.settings);
-        setActionMessage('💾 บันทึกเบอร์โทรแอดมินและราคามาตรฐานระบบสำเร็จแล้ว!');
+        const timeStr = new Date().toLocaleTimeString('th-TH');
+        setAdminSettingsSavedTime(timeStr);
+        setActionMessage(`💾 บันทึกเบอร์โทรแอดมินและราคามาตรฐานระบบสำเร็จแล้ว! (${timeStr})`);
+        alert('✅ บันทึกเบอร์โทรแอดมินและราคามาตรฐานระบบเรียบร้อยแล้ว!');
+        setShowQuickSettingsModal(false);
+        fetchData();
       } else {
         alert(data.error || 'บันทึกไม่สำเร็จ');
       }
@@ -383,6 +390,7 @@ export default function SuperAdminPage() {
       const data = await res.json();
       if (data.success) {
         setActionMessage(`บันทึกข้อมูลและโลโก้ของร้าน "${editingStoreModal.name}" เรียบร้อยแล้ว!`);
+        alert(`✅ บันทึกข้อมูลและโลโก้ของร้าน "${editingStoreModal.name}" เรียบร้อยแล้ว!`);
         setEditingStoreModal(null);
         fetchData();
       } else {
@@ -911,10 +919,10 @@ export default function SuperAdminPage() {
               </div>
 
               <button
-                onClick={() => setActiveTab('plans')}
-                className="py-1.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition self-start md:self-center"
+                onClick={() => setShowQuickSettingsModal(true)}
+                className="py-1.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition self-start md:self-center shadow-lg shadow-orange-600/20"
               >
-                <Edit className="w-3.5 h-3.5 text-amber-400" />
+                <Edit className="w-3.5 h-3.5 text-white" />
                 <span>ปรับเปลี่ยนราคา & เบอร์โทร</span>
               </button>
             </div>
@@ -1293,6 +1301,13 @@ export default function SuperAdminPage() {
                   </div>
                 </div>
 
+                {adminSettingsSavedTime && (
+                  <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <span>✓ บันทึกเบอร์โทรและราคามาตรฐานระบบสำเร็จเรียบร้อยแล้วเมื่อ {adminSettingsSavedTime}</span>
+                  </div>
+                )}
+
                 {/* Calculation preview & Save button */}
                 <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-700/60 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="text-xs text-slate-300">
@@ -1304,9 +1319,9 @@ export default function SuperAdminPage() {
                   <button
                     type="submit"
                     disabled={savingAdminSettings}
-                    className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-orange-600/30 transition whitespace-nowrap disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-orange-600/30 transition whitespace-nowrap disabled:opacity-50"
                   >
-                    <Save className="w-3.5 h-3.5" />
+                    <Save className="w-4 h-4" />
                     <span>{savingAdminSettings ? 'กำลังบันทึก...' : '💾 บันทึกค่าระบบ & เบอร์โทร'}</span>
                   </button>
                 </div>
@@ -1921,6 +1936,126 @@ export default function SuperAdminPage() {
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>{savingCreds ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: QUICK ADMIN SETTINGS & PHONE */}
+        {showQuickSettingsModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-base">
+                      กำหนดราคามาตรฐาน & เบอร์ติดต่อ
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      ราคากลางสำหรับทุกร้าน และเบอร์โทรสำหรับแจ้งเตือนร้านใกล้หมดอายุ
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowQuickSettingsModal(false)}
+                  className="text-slate-400 hover:text-white text-lg p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAdminSettings} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-orange-400" />
+                    <span>เบอร์โทรติดต่อแอดมินสำหรับร้านค้า *</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={adminSettings.admin_phone}
+                    onChange={(e) => setAdminSettings({ ...adminSettings, admin_phone: e.target.value })}
+                    placeholder="เช่น 093-792-5665"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-orange-500"
+                  />
+                  <span className="block text-[11px] text-slate-400 mt-1">
+                    จะแสดงบนแถบสีแดงและการแจ้งเตือนทุกเช้าของร้านที่ใกล้หมดอายุ 7 วัน
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>ราคาชำระรายปี (บ./ปี) *</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={adminSettings.base_yearly_price}
+                      onChange={(e) => {
+                        const y = Number(e.target.value) || 0;
+                        const m = Math.round((y / 12) * (1 + adminSettings.monthly_surcharge_percent / 100));
+                        setAdminSettings({ ...adminSettings, base_yearly_price: y, calculated_monthly_price: m });
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm font-bold focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-amber-400" />
+                      <span>ผ่อนรายเดือนคิดเพิ่ม (%) *</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={adminSettings.monthly_surcharge_percent}
+                      onChange={(e) => {
+                        const p = Number(e.target.value) || 0;
+                        const m = Math.round((adminSettings.base_yearly_price / 12) * (1 + p / 100));
+                        setAdminSettings({ ...adminSettings, monthly_surcharge_percent: p, calculated_monthly_price: m });
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm font-bold focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-700/60 text-xs text-slate-300">
+                  💡 ผลลัพธ์: หากร้านเลือกผ่อนรายเดือน จะคิด{' '}
+                  <strong className="text-amber-400 font-mono text-sm">{formatMoney(adminSettings.calculated_monthly_price)} บาท / เดือน</strong>
+                  <span className="block text-[11px] text-slate-400 mt-0.5">
+                    (คิดจาก {formatMoney(adminSettings.base_yearly_price)} ÷ 12 = {Math.round(adminSettings.base_yearly_price / 12)} บ. + {adminSettings.monthly_surcharge_percent}%)
+                  </span>
+                </div>
+
+                {adminSettingsSavedTime && (
+                  <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span>✓ บันทึกการตั้งค่าสำเร็จเมื่อ {adminSettingsSavedTime}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickSettingsModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingAdminSettings}
+                    className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-orange-600/30 transition disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingAdminSettings ? 'กำลังบันทึก...' : '💾 บันทึกค่าระบบ & เบอร์โทร'}</span>
                   </button>
                 </div>
               </form>

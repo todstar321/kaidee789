@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query, queryOne, execute } from '@/lib/db';
+import { query, queryOne, execute, ensureSchema } from '@/lib/db';
 import { Category, MenuItem, Table, BuffetTier } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,7 @@ export async function POST(
   { params }: { params: { storeId: string } }
 ) {
   try {
+    await ensureSchema();
     const body = await req.json();
     const newStoreName = body.new_name;
 
@@ -28,12 +29,16 @@ export async function POST(
     const expireDate = new Date();
     expireDate.setDate(expireDate.getDate() + 30);
 
+    const clonedUsername = 'user_' + Math.random().toString(36).substring(2, 8);
+    const clonedPassword = Math.random().toString(36).substring(2, 8);
+
     // 1. Insert cloned store
     await execute(`
       INSERT INTO stores (
         id, name, slug, type, logo_url, cover_url, phone, address, promptpay_number, promptpay_name,
-        buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at,
+        login_username, login_password, service_charge_percent, vat_percent
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       newId,
       newStoreName,
@@ -50,7 +55,11 @@ export async function POST(
       body.plan_billing_type || 'monthly',
       expireDate.toISOString(),
       'active',
-      now
+      now,
+      clonedUsername,
+      clonedPassword,
+      Number(sourceStore.service_charge_percent || 0),
+      Number(sourceStore.vat_percent || 7)
     ]);
 
     // 2. Clone Buffet Tiers (if buffet)
@@ -88,8 +97,8 @@ export async function POST(
 
       await execute(`
         INSERT INTO menu_items (
-          id, store_id, category_id, name, description, price, cost_price, image_url, is_available, min_buffet_tier_id, options_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, store_id, category_id, name, description, price, cost_price, image_url, is_available, min_buffet_tier_id, options_json, cooking_time_mins
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         newMenuId,
         newId,
@@ -101,7 +110,8 @@ export async function POST(
         item.image_url,
         1,
         newTierId,
-        item.options_json || ''
+        item.options_json || '',
+        Number(item.cooking_time_mins || 10)
       ]);
     }
 
