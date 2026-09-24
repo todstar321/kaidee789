@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { query, queryOne, execute } from '@/lib/db';
+import { query, queryOne, execute, ensureSchema } from '@/lib/db';
 import { Member } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
+    await ensureSchema();
     const url = new URL(req.url);
     const storeId = url.searchParams.get('store_id');
     const q = url.searchParams.get('q')?.trim() || '';
@@ -43,17 +44,24 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    await ensureSchema();
     const body = await req.json();
     const { store_id, name, nickname, phone, points, notes } = body;
 
-    if (!store_id || !name || !phone) {
+    if (!store_id || !name?.trim() || !phone?.trim()) {
       return NextResponse.json({ error: 'กรุณากรอกชื่อและเบอร์โทรศัพท์' }, { status: 400 });
     }
+
+    const cleanPhone = phone.trim();
+    const cleanName = name.trim();
+    const cleanNickname = nickname?.trim() || null;
+    const cleanNotes = notes?.trim() || '';
+    const cleanPoints = !isNaN(Number(points)) ? Number(points) : 0;
 
     // Check if member with this phone exists in this store
     const existing = await queryOne<Member>(`
       SELECT * FROM members WHERE store_id = ? AND phone = ?
-    `, [store_id, phone]);
+    `, [store_id, cleanPhone]);
 
     if (existing) {
       // Update name/nickname/notes/points if provided
@@ -64,7 +72,7 @@ export async function POST(req: Request) {
             points = points + ?,
             notes = COALESCE(?, notes)
         WHERE id = ?
-      `, [name, nickname || null, Number(points || 0), notes || null, existing.id]);
+      `, [cleanName, cleanNickname, cleanPoints, cleanNotes, existing.id]);
 
       const updated = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [existing.id]);
       return NextResponse.json({ success: true, member: updated, message: 'อัปเดตข้อมูลสมาชิกเรียบร้อยแล้ว' });
@@ -76,24 +84,39 @@ export async function POST(req: Request) {
     await execute(`
       INSERT INTO members (id, store_id, name, nickname, phone, points, notes, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, store_id, name, nickname || null, phone, Number(points || 0), notes || '', now]);
+    `, [id, store_id, cleanName, cleanNickname, cleanPhone, cleanPoints, cleanNotes, now]);
 
     const created = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
     return NextResponse.json({ success: true, member: created, message: 'ลงทะเบียนสมาชิกใหม่เรียบร้อยแล้ว' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to save member:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request) {
   try {
+    await ensureSchema();
     const body = await req.json();
     const { id, name, nickname, phone, points, notes } = body;
 
-    if (!id || !name || !phone) {
-      return NextResponse.json({ error: 'กรุณากรอกรหัสสมาชิก ชื่อ และเบอร์โทรศัพท์' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'กรุณาระบุรหัสสมาชิก (id)' }, { status: 400 });
     }
+    if (!name?.trim() || !phone?.trim()) {
+      return NextResponse.json({ error: 'กรุณากรอกชื่อและเบอร์โทรศัพท์' }, { status: 400 });
+    }
+
+    const existing = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
+    if (!existing) {
+      return NextResponse.json({ error: 'ไม่พบข้อมูลสมาชิก' }, { status: 404 });
+    }
+
+    const cleanName = name.trim();
+    const cleanNickname = nickname !== undefined ? (nickname?.trim() || null) : existing.nickname;
+    const cleanPhone = phone.trim();
+    const cleanPoints = points !== undefined && points !== null && !isNaN(Number(points)) ? Number(points) : (existing.points || 0);
+    const cleanNotes = notes !== undefined && notes !== null ? String(notes).trim() : (existing.notes || '');
 
     await execute(`
       UPDATE members 
@@ -103,21 +126,17 @@ export async function PUT(req: Request) {
           points = ?,
           notes = ?
       WHERE id = ?
-    `, [name, nickname || null, phone, Number(points || 0), notes || '', id]);
+    `, [cleanName, cleanNickname, cleanPhone, cleanPoints, cleanNotes, id]);
 
     const updated = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
-    if (!updated) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลสมาชิก' }, { status: 404 });
-    }
-
     return NextResponse.json({ 
       success: true, 
       member: updated, 
       message: 'บันทึกการแก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว' 
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to update member:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 

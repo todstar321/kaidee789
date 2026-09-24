@@ -34,20 +34,59 @@ let _schemaChecked = false;
 
 export async function ensureSchema(): Promise<void> {
   if (_schemaChecked) return;
-  _schemaChecked = true;
 
   try {
     const client = getDbClient();
 
-    // 1. Add login credentials columns to stores table if not already present
-    await client.execute("ALTER TABLE stores ADD COLUMN login_username TEXT;").catch(() => {});
-    await client.execute("ALTER TABLE stores ADD COLUMN login_password TEXT;").catch(() => {});
+    // 1. Add columns to stores table if not already present
+    const storeCols = [
+      "ALTER TABLE stores ADD COLUMN login_username TEXT;",
+      "ALTER TABLE stores ADD COLUMN login_password TEXT;",
+      "ALTER TABLE stores ADD COLUMN promptpay_qr_url TEXT;",
+      "ALTER TABLE stores ADD COLUMN service_charge_percent REAL DEFAULT 10;",
+      "ALTER TABLE stores ADD COLUMN vat_percent REAL DEFAULT 7;",
+      "ALTER TABLE stores ADD COLUMN custom_price_yearly REAL;",
+      "ALTER TABLE stores ADD COLUMN custom_price_monthly REAL;",
+      "ALTER TABLE stores ADD COLUMN discount_percent REAL DEFAULT 0;",
+      "ALTER TABLE stores ADD COLUMN trial_months INTEGER DEFAULT 0;",
+      "ALTER TABLE stores ADD COLUMN admin_phone TEXT;",
+    ];
+    for (const sql of storeCols) {
+      await client.execute(sql).catch(() => {});
+    }
 
     // 2. Add extra columns to members table if not already present
-    await client.execute("ALTER TABLE members ADD COLUMN points INTEGER DEFAULT 0;").catch(() => {});
-    await client.execute("ALTER TABLE members ADD COLUMN notes TEXT;").catch(() => {});
+    const memberCols = [
+      "ALTER TABLE members ADD COLUMN nickname TEXT;",
+      "ALTER TABLE members ADD COLUMN points INTEGER DEFAULT 0;",
+      "ALTER TABLE members ADD COLUMN notes TEXT;",
+    ];
+    for (const sql of memberCols) {
+      await client.execute(sql).catch(() => {});
+    }
 
-    // 3. Create subscription_plans table for Super Admin pricing configuration
+    // 3. Create admin_settings table for platform-wide pricing & admin contact phone
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `).catch(() => {});
+
+    // Seed default settings if empty
+    const defaultSettings: [string, string][] = [
+      ['admin_phone', '081-234-5678'],
+      ['base_yearly_price', '3000'],
+      ['monthly_surcharge_percent', '30'],
+    ];
+    for (const [k, v] of defaultSettings) {
+      await client.execute({
+        sql: `INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)`,
+        args: [k, v],
+      }).catch(() => {});
+    }
+
+    // 4. Create subscription_plans table for Super Admin pricing configuration
     await client.execute(`
       CREATE TABLE IF NOT EXISTS subscription_plans (
         id TEXT PRIMARY KEY,
@@ -73,7 +112,7 @@ export async function ensureSchema(): Promise<void> {
     `).catch(() => {});
     }
 
-    // 4. Create system_heartbeats table for wake-up cron & health checks
+    // 5. Create system_heartbeats table for wake-up cron & health checks
     await client.execute(`
       CREATE TABLE IF NOT EXISTS system_heartbeats (
         id TEXT PRIMARY KEY,
@@ -83,6 +122,8 @@ export async function ensureSchema(): Promise<void> {
         created_at TEXT NOT NULL
       );
     `).catch(() => {});
+
+    _schemaChecked = true;
   } catch (err) {
     console.warn('ensureSchema non-fatal error:', err);
   }

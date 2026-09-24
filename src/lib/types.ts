@@ -38,6 +38,11 @@ export interface Store {
   login_password?: string;
   status: 'active' | 'suspended';
   created_at: string;
+  custom_price_yearly?: number | null;
+  custom_price_monthly?: number | null;
+  discount_percent?: number;
+  trial_months?: number;
+  admin_phone?: string;
 }
 
 export interface SubscriptionPlanConfig {

@@ -17,9 +17,11 @@ import {
   Clock,
   AlertCircle,
   ShieldAlert,
-  Users
+  Users,
+  Phone
 } from 'lucide-react';
 import { Store, StoreStaff, StaffRole } from '@/lib/types';
+import { formatThaiDate } from '@/lib/utils';
 
 export default function StoreLayout({
   children,
@@ -37,6 +39,14 @@ export default function StoreLayout({
   const [targetStaff, setTargetStaff] = useState<StoreStaff | null>(null);
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
+  const [showDailyExpiryModal, setShowDailyExpiryModal] = useState(false);
+
+  // Compute days remaining for 7-day warning
+  const daysRemaining = store?.plan_expires_at
+    ? Math.ceil((new Date(store.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : 999;
+  const isExpiringSoon = daysRemaining <= 7;
+  const adminPhone = store?.admin_phone || '081-234-5678';
 
   useEffect(() => {
     fetch(`/api/stores/${params.storeId}`)
@@ -52,10 +62,30 @@ export default function StoreLayout({
               setCurrentStaffName(ownerStaff.name);
             }
           }
+
+          // Check if within 7 days and not acknowledged today
+          if (data.plan_expires_at) {
+            const days = Math.ceil((new Date(data.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            if (days <= 7) {
+              const todayKey = 'expiry_modal_ack_' + new Date().toISOString().split('T')[0];
+              const ack = typeof window !== 'undefined' ? localStorage.getItem(todayKey) : null;
+              if (!ack) {
+                setShowDailyExpiryModal(true);
+              }
+            }
+          }
         }
       })
       .catch((err) => console.error(err));
   }, [params.storeId]);
+
+  const handleDismissDailyModal = () => {
+    const todayKey = 'expiry_modal_ack_' + new Date().toISOString().split('T')[0];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(todayKey, 'true');
+    }
+    setShowDailyExpiryModal(false);
+  };
 
   const handleSelectStaff = (s: StoreStaff) => {
     setTargetStaff(s);
@@ -125,6 +155,33 @@ export default function StoreLayout({
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-800">
+      {/* 7-DAY EXPIRATION STICKY ALERT BANNER */}
+      {isExpiringSoon && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white px-4 py-2 text-xs font-semibold shadow-md sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 border-b border-red-700">
+          <div className="flex items-center gap-2">
+            <span className="p-1 rounded-md bg-white/20 animate-pulse">
+              <AlertCircle className="w-4 h-4" />
+            </span>
+            <span>
+              {daysRemaining <= 0 ? (
+                <>🚨 <strong>แจ้งเตือนสำคัญ:</strong> บัญชีร้านค้านี้หมดอายุการใช้งานแล้ว กรุณาติดต่อแอดมินเพื่อต่ออายุทันที</>
+              ) : (
+                <>⚠️ <strong>แจ้งเตือน:</strong> แอปพลิเคชันของร้านจะหมดอายุในอีก <span className="underline font-bold text-yellow-200">{daysRemaining} วัน</span> (วันที่ {formatThaiDate(store?.plan_expires_at || '')}) กรุณาติดต่อแอดมินเพื่อต่ออายุการใช้งาน</>
+              )}
+            </span>
+          </div>
+
+          <a
+            href={`tel:${adminPhone}`}
+            className="px-3.5 py-1 bg-white hover:bg-yellow-50 text-red-700 hover:text-red-800 rounded-lg font-bold flex items-center gap-1.5 shadow transition text-xs whitespace-nowrap animate-bounce"
+            title="กดเพื่อโทรออกหาแอดมินทันที"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>📞 กดโทรหาแอดมิน: {adminPhone}</span>
+          </a>
+        </div>
+      )}
+
       {/* Top Operational Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
@@ -282,6 +339,64 @@ export default function StoreLayout({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MORNING EXPIRY MODAL DIALOG */}
+      {showDailyExpiryModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-500 animate-in fade-in zoom-in duration-200">
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 mx-auto flex items-center justify-center mb-3 shadow-inner">
+                <AlertCircle className="w-8 h-8 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900">
+                แจ้งเตือนการหมดอายุของระบบร้านค้า
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                ร้าน: <strong>{store?.name}</strong>
+              </p>
+            </div>
+
+            <div className="p-4 bg-red-50 rounded-2xl border border-red-200 text-xs text-red-900 space-y-2 mb-5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700">สถานะแพ็กเกจ:</span>
+                <span className="font-bold text-red-600 uppercase">{store?.plan_id} ({store?.plan_billing_type})</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700">วันหมดอายุ:</span>
+                <span className="font-bold text-slate-900 font-mono">{formatThaiDate(store?.plan_expires_at || '')}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-red-200/60">
+                <span className="font-semibold text-slate-700">เวลาที่เหลือ:</span>
+                <span className="font-black text-red-600 text-sm">
+                  {daysRemaining <= 0 ? 'หมดอายุแล้ววันนี้' : `เหลือเวลาอีก ${daysRemaining} วัน`}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 text-center mb-5 leading-relaxed">
+              เพื่อป้องกันไม่ให้ระบบรับออเดอร์และการสั่งอาหารผ่าน QR Code หยุดชะงัก กรุณาติดต่อแอดมินเพื่อทำการต่ออายุการใช้งานได้ทันที
+            </p>
+
+            <div className="space-y-2">
+              <a
+                href={`tel:${adminPhone}`}
+                className="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition"
+              >
+                <Phone className="w-4 h-4" />
+                <span>📞 โทรติดต่อแอดมินทันที: {adminPhone}</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={handleDismissDailyModal}
+                className="w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+              >
+                รับทราบ / เข้าสู่ระบบการขาย
+              </button>
+            </div>
           </div>
         </div>
       )}

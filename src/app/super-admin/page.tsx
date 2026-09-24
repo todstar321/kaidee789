@@ -30,10 +30,30 @@ import {
   Cpu,
   Layers,
   Save,
-  Shuffle
+  Shuffle,
+  Phone,
+  Calendar,
+  Gift,
+  Percent,
+  Tag,
+  Edit,
+  Bell,
+  AlertCircle
 } from 'lucide-react';
-import { Store, SubscriptionPayment, SuperAdmin, SubscriptionPlanConfig } from '@/lib/types';
+import { Store, SubscriptionPayment, SuperAdmin, SubscriptionPlanConfig, StoreType } from '@/lib/types';
 import { formatMoney, formatThaiDate } from '@/lib/utils';
+
+const LOGO_PRESETS = [
+  { label: '🍲 ชาบู/สุกี้', url: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=200&h=200&fit=crop' },
+  { label: '🥩 ปิ้งย่าง BBQ', url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&h=200&fit=crop' },
+  { label: '🍛 อาหารไทย', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=200&h=200&fit=crop' },
+  { label: '☕ คาเฟ่ & ชา', url: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&h=200&fit=crop' },
+  { label: '🍣 อาหารญี่ปุ่น', url: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=200&h=200&fit=crop' },
+  { label: '🍜 ก๋วยเตี๋ยว', url: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=200&h=200&fit=crop' },
+  { label: '🦞 ซีฟู้ด', url: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=200&h=200&fit=crop' },
+  { label: '🍕 พิซซ่า', url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=200&h=200&fit=crop' },
+  { label: '🍔 เบอร์เกอร์', url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=200&h=200&fit=crop' },
+];
 
 export default function SuperAdminPage() {
   const [activeTab, setActiveTab] = useState<'stores' | 'slips' | 'assistants' | 'plans' | 'keepalive'>('stores');
@@ -43,6 +63,35 @@ export default function SuperAdminPage() {
   const [plans, setPlans] = useState<SubscriptionPlanConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Admin Master Pricing & Contact Phone Settings
+  const [adminSettings, setAdminSettings] = useState({
+    admin_phone: '081-234-5678',
+    base_yearly_price: 3000,
+    monthly_surcharge_percent: 30,
+    calculated_monthly_price: 325,
+  });
+  const [savingAdminSettings, setSavingAdminSettings] = useState(false);
+
+  // Store Edit Modal State (Edit name, logo, phone, pricing, trial, discounts)
+  const [editingStoreModal, setEditingStoreModal] = useState<{
+    id: string;
+    name: string;
+    type: StoreType;
+    logo_url: string;
+    phone: string;
+    address: string;
+    promptpay_number: string;
+    promptpay_name: string;
+    plan_id: string;
+    plan_billing_type: string;
+    plan_expires_at: string;
+    custom_price_yearly: string;
+    custom_price_monthly: string;
+    discount_percent: string;
+    status: 'active' | 'suspended';
+  } | null>(null);
+  const [savingStoreEdit, setSavingStoreEdit] = useState(false);
 
   // Modals state
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
@@ -133,16 +182,25 @@ export default function SuperAdminPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resStores, resSlips, resAssistants, resPlans] = await Promise.all([
+      const [resStores, resSlips, resAssistants, resPlans, resSettings] = await Promise.all([
         fetch('/api/stores').then(r => r.json()),
         fetch('/api/subscription').then(r => r.json()),
         fetch('/api/super-admin/assistants').then(r => r.json()),
         fetch('/api/super-admin/plans').then(r => r.json()),
+        fetch('/api/super-admin/settings').then(r => r.json()).catch(() => null),
       ]);
       if (Array.isArray(resStores)) setStores(resStores);
       if (Array.isArray(resSlips)) setSlips(resSlips);
       if (Array.isArray(resAssistants)) setAssistants(resAssistants);
       if (Array.isArray(resPlans)) setPlans(resPlans);
+      if (resSettings?.admin_phone) {
+        setAdminSettings({
+          admin_phone: resSettings.admin_phone,
+          base_yearly_price: resSettings.base_yearly_price || 3000,
+          monthly_surcharge_percent: resSettings.monthly_surcharge_percent || 30,
+          calculated_monthly_price: resSettings.calculated_monthly_price || 325,
+        });
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -169,7 +227,6 @@ export default function SuperAdminPage() {
         setShowAddStoreModal(false);
         setActionMessage(`สร้างร้านค้า "${newStoreData.name}" สำเร็จเรียบร้อย!`);
         
-        // Open credentials handover modal
         const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kaidee789.vercel.app';
         setCreatedCredentials({
           storeName: newStoreData.name,
@@ -228,6 +285,145 @@ export default function SuperAdminPage() {
     }
   };
 
+  const handleSaveAdminSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAdminSettings(true);
+    try {
+      const res = await fetch('/api/super-admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(adminSettings),
+      });
+      const data = await res.json();
+      if (data.success && data.settings) {
+        setAdminSettings(data.settings);
+        setActionMessage('💾 บันทึกเบอร์โทรแอดมินและราคามาตรฐานระบบสำเร็จแล้ว!');
+      } else {
+        alert(data.error || 'บันทึกไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (err.message || ''));
+    } finally {
+      setSavingAdminSettings(false);
+    }
+  };
+
+  const handleOpenEditStore = (store: Store) => {
+    let formattedDate = '';
+    if (store.plan_expires_at) {
+      try {
+        formattedDate = new Date(store.plan_expires_at).toISOString().split('T')[0];
+      } catch {}
+    }
+
+    setEditingStoreModal({
+      id: store.id,
+      name: store.name || '',
+      type: store.type || 'alacarte',
+      logo_url: store.logo_url || '',
+      phone: store.phone || '',
+      address: store.address || '',
+      promptpay_number: store.promptpay_number || '',
+      promptpay_name: store.promptpay_name || '',
+      plan_id: store.plan_id || 'pro',
+      plan_billing_type: store.plan_billing_type || 'yearly',
+      plan_expires_at: formattedDate,
+      custom_price_yearly: store.custom_price_yearly !== null && store.custom_price_yearly !== undefined ? String(store.custom_price_yearly) : '',
+      custom_price_monthly: store.custom_price_monthly !== null && store.custom_price_monthly !== undefined ? String(store.custom_price_monthly) : '',
+      discount_percent: store.discount_percent ? String(store.discount_percent) : '0',
+      status: store.status || 'active',
+    });
+  };
+
+  const handleAddTrialDays = (days: number) => {
+    if (!editingStoreModal) return;
+    const currentBase = editingStoreModal.plan_expires_at ? new Date(editingStoreModal.plan_expires_at) : new Date();
+    const baseDate = currentBase.getTime() < Date.now() ? new Date() : currentBase;
+    baseDate.setDate(baseDate.getDate() + days);
+    const newDateStr = baseDate.toISOString().split('T')[0];
+    setEditingStoreModal({
+      ...editingStoreModal,
+      plan_expires_at: newDateStr,
+    });
+  };
+
+  const handleSaveStoreEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStoreModal) return;
+    setSavingStoreEdit(true);
+    try {
+      let isoExpiry: string | undefined = undefined;
+      if (editingStoreModal.plan_expires_at) {
+        const d = new Date(editingStoreModal.plan_expires_at);
+        d.setHours(23, 59, 59, 999);
+        isoExpiry = d.toISOString();
+      }
+
+      const res = await fetch(`/api/stores/${editingStoreModal.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingStoreModal.name.trim(),
+          type: editingStoreModal.type,
+          logo_url: editingStoreModal.logo_url.trim(),
+          phone: editingStoreModal.phone.trim(),
+          address: editingStoreModal.address.trim(),
+          promptpay_number: editingStoreModal.promptpay_number.trim(),
+          promptpay_name: editingStoreModal.promptpay_name.trim(),
+          plan_id: editingStoreModal.plan_id,
+          plan_billing_type: editingStoreModal.plan_billing_type,
+          plan_expires_at: isoExpiry,
+          custom_price_yearly: editingStoreModal.custom_price_yearly.trim() ? Number(editingStoreModal.custom_price_yearly) : null,
+          custom_price_monthly: editingStoreModal.custom_price_monthly.trim() ? Number(editingStoreModal.custom_price_monthly) : null,
+          discount_percent: Number(editingStoreModal.discount_percent) || 0,
+          status: editingStoreModal.status,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionMessage(`บันทึกข้อมูลและโลโก้ของร้าน "${editingStoreModal.name}" เรียบร้อยแล้ว!`);
+        setEditingStoreModal(null);
+        fetchData();
+      } else {
+        alert(data.error || 'บันทึกข้อมูลไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาด: ' + (err.message || ''));
+    } finally {
+      setSavingStoreEdit(false);
+    }
+  };
+
+  const handleQuickExtendTrial = async (store: Store, days: number, label: string) => {
+    try {
+      const currentExpiry = store.plan_expires_at ? new Date(store.plan_expires_at) : new Date();
+      const baseDate = currentExpiry.getTime() < Date.now() ? new Date() : currentExpiry;
+      baseDate.setDate(baseDate.getDate() + days);
+      baseDate.setHours(23, 59, 59, 999);
+
+      const res = await fetch(`/api/stores/${store.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_expires_at: baseDate.toISOString(),
+          status: 'active',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionMessage(`ต่ออายุการใช้งาน (${label}) ให้ร้าน "${store.name}" เรียบร้อยแล้ว!`);
+        fetchData();
+      } else {
+        alert(data.error || 'ไม่สามารถต่ออายุได้');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาด: ' + (err.message || ''));
+    }
+  };
+
   const handleSaveStoreCreds = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeCredsModal) return;
@@ -250,10 +446,11 @@ export default function SuperAdminPage() {
         setStoreCredsModal(null);
         fetchData();
       } else {
-        alert('บันทึกไม่สำเร็จ');
+        alert(data.error || 'บันทึกไม่สำเร็จ');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert('เกิดข้อผิดพลาด: ' + (err.message || ''));
     } finally {
       setSavingCreds(false);
     }
@@ -418,6 +615,15 @@ export default function SuperAdminPage() {
 
   const pendingSlipsCount = slips.filter(s => s.status === 'pending').length;
 
+  const expiringStores = stores.filter(s => {
+    if (!s.plan_expires_at) return false;
+    const days = Math.ceil((new Date(s.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return days <= 7;
+  }).map(s => {
+    const days = Math.ceil((new Date(s.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return { ...s, daysRemaining: days };
+  }).sort((a, b) => a.daysRemaining - b.daysRemaining);
+
   const filteredStores = stores.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.id.toLowerCase().includes(searchQuery.toLowerCase())
@@ -527,6 +733,11 @@ export default function SuperAdminPage() {
           >
             <StoreIcon className="w-4 h-4" />
             <span>จัดการร้านค้า ({stores.length})</span>
+            {expiringStores.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold animate-pulse">
+                {expiringStores.length} ใกล้หมดอายุ
+              </span>
+            )}
           </button>
 
           <button
@@ -586,6 +797,128 @@ export default function SuperAdminPage() {
         {/* TAB 1: STORES MANAGEMENT */}
         {activeTab === 'stores' && (
           <div>
+            {/* 1. EXPIRING STORES ALERT SECTION (Within 7 days or Expired) */}
+            {expiringStores.length > 0 && (
+              <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-red-950/70 via-slate-800 to-amber-950/50 border border-red-500/50 shadow-xl">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-red-500/20 text-red-400 animate-pulse">
+                      <AlertTriangle className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h3 className="font-bold text-white text-sm">
+                        🔔 แจ้งเตือนร้านค้าที่ใกล้หมดอายุ (ภายใน 7 วัน) & หมดอายุแล้ว ({expiringStores.length} ร้าน)
+                      </h3>
+                      <p className="text-[11px] text-red-300/80">
+                        ระบบจะแจ้งเตือนเข้าแอปของร้านค้าทุกเช้า พร้อมปุ่มให้ร้านกดโทรหาแอดมิน ({adminSettings.admin_phone})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {expiringStores.map((s) => (
+                    <div
+                      key={s.id}
+                      className="p-3 rounded-xl bg-slate-900/90 border border-red-500/30 flex flex-col justify-between"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={s.logo_url}
+                            alt={s.name}
+                            className="w-8 h-8 rounded-lg object-cover border border-slate-700 flex-shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-bold text-white text-xs truncate">{s.name}</div>
+                            <div className="text-[10px] text-slate-400">หมดอายุ: {formatThaiDate(s.plan_expires_at)}</div>
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                            s.daysRemaining <= 0
+                              ? 'bg-red-500 text-white animate-pulse'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          }`}
+                        >
+                          {s.daysRemaining <= 0 ? 'หมดอายุแล้ว' : `เหลืออีก ${s.daysRemaining} วัน`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800 text-[11px]">
+                        <button
+                          onClick={() => handleOpenEditStore(s)}
+                          className="flex-1 py-1 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-medium flex items-center justify-center gap-1 transition"
+                        >
+                          <Edit className="w-3 h-3" />
+                          <span>ต่ออายุ/แก้ไข</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickExtendTrial(s, 90, 'ฟรี 3 เดือน')}
+                          className="py-1 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium transition"
+                          title="กดเพื่อให้สิทธิ์ใช้งานฟรีต่ออีก 3 เดือนทันที"
+                        >
+                          +3 เดือน
+                        </button>
+                        {s.phone && (
+                          <a
+                            href={`tel:${s.phone}`}
+                            className="py-1 px-2 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center justify-center transition"
+                            title={`โทรหาร้านค้า (${s.phone})`}
+                          >
+                            <Phone className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* MASTER PRICING & ADMIN PHONE SUMMARY BAR */}
+            <div className="mb-6 p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 shadow flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-slate-400 text-[10px]">เบอร์โทรแอดมินสำหรับให้ร้านติดต่อ:</span>
+                    <strong className="text-white text-sm font-mono">{adminSettings.admin_phone}</strong>
+                  </div>
+                </div>
+
+                <div className="h-6 w-px bg-slate-700 hidden sm:block" />
+
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-slate-400 text-[10px]">ราคามาตรฐานระบบ (ชำระรายปี):</span>
+                    <strong className="text-white text-sm">{formatMoney(adminSettings.base_yearly_price)} บ./ปี</strong>
+                  </div>
+                </div>
+
+                <div className="h-6 w-px bg-slate-700 hidden sm:block" />
+
+                <div>
+                  <span className="block text-slate-400 text-[10px]">ผ่อนรายเดือน (+{adminSettings.monthly_surcharge_percent}%):</span>
+                  <strong className="text-amber-400 text-sm">{formatMoney(adminSettings.calculated_monthly_price)} บ./เดือน</strong>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('plans')}
+                className="py-1.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition self-start md:self-center"
+              >
+                <Edit className="w-3.5 h-3.5 text-amber-400" />
+                <span>ปรับเปลี่ยนราคา & เบอร์โทร</span>
+              </button>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -645,6 +978,18 @@ export default function SuperAdminPage() {
                         <span className="text-slate-400">วันหมดอายุ:</span>
                         <span className="font-medium text-slate-200">{formatThaiDate(store.plan_expires_at)}</span>
                       </div>
+                      {Number(store.discount_percent) > 0 && (
+                        <div className="flex justify-between text-amber-300 font-medium">
+                          <span>ส่วนลดพิเศษ:</span>
+                          <span>{store.discount_percent}%</span>
+                        </div>
+                      )}
+                      {store.custom_price_yearly !== null && store.custom_price_yearly !== undefined && (
+                        <div className="flex justify-between text-emerald-300 font-medium">
+                          <span>ราคาเฉพาะร้าน:</span>
+                          <span>{formatMoney(store.custom_price_yearly)} บ./ปี</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-slate-400">บัญชีร้าน:</span>
                         <span className="font-mono text-amber-300">
@@ -669,6 +1014,16 @@ export default function SuperAdminPage() {
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>เข้าจัดการระบบเสมือนเป็นเจ้าของร้าน (Impersonate)</span>
                     </Link>
+
+                    {/* Button 2: Full Store Edit (Name, Logo, Pricing, Discounts, Trial) */}
+                    <button
+                      onClick={() => handleOpenEditStore(store)}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-amber-500/30 hover:border-amber-400"
+                      title="แก้ไขชื่อร้าน, โลโก้, ราคาสมาชิก, ส่วนลดพิเศษ และวันหมดอายุ"
+                    >
+                      <Edit className="w-3.5 h-3.5 text-amber-400" />
+                      <span>✏️ แก้ไขร้าน (ชื่อ, โลโก้, ราคา & อายุ)</span>
+                    </button>
 
                     <div className="grid grid-cols-3 gap-1.5 pt-1">
                       <button
@@ -854,6 +1209,108 @@ export default function SuperAdminPage() {
                 <Save className="w-4 h-4" />
                 <span>{savingPlans ? 'กำลังบันทึก...' : '💾 บันทึกการเปลี่ยนแปลงราคา'}</span>
               </button>
+            </div>
+
+            {/* MASTER PRICING & ADMIN PHONE SETTINGS CARD */}
+            <div className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-slate-800 via-slate-800/90 to-orange-950/30 border border-orange-500/40 shadow-xl">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/60">
+                <span className="p-2 rounded-xl bg-orange-500/20 text-orange-400">
+                  <DollarSign className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-white text-base">
+                    กำหนดราคามาตรฐานเดียวทั้งระบบ & เบอร์โทรติดต่อแอดมิน
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    กำหนดราคากลางสำหรับทุกร้าน (เช่น 3,000 บ./ปี) และคิดผ่อนเพิ่มกี่ % พร้อมเบอร์โทรสำหรับแจ้งเตือนร้านใกล้หมดอายุ
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveAdminSettings} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Admin Phone */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-orange-400" />
+                      <span>เบอร์โทรติดต่อแอดมิน *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={adminSettings.admin_phone}
+                      onChange={(e) => setAdminSettings({ ...adminSettings, admin_phone: e.target.value })}
+                      placeholder="เช่น 081-234-5678"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-orange-500"
+                    />
+                    <span className="block text-[10px] text-slate-400 mt-1">
+                      จะปรากฏบนหน้าแจ้งเตือนของร้านค้าที่ใกล้หมดอายุ 7 วัน
+                    </span>
+                  </div>
+
+                  {/* Base Yearly Price */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>ราคาชำระรายปีมาตรฐาน (บาท/ปี) *</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={adminSettings.base_yearly_price}
+                      onChange={(e) => {
+                        const y = Number(e.target.value) || 0;
+                        const m = Math.round((y / 12) * (1 + adminSettings.monthly_surcharge_percent / 100));
+                        setAdminSettings({ ...adminSettings, base_yearly_price: y, calculated_monthly_price: m });
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm font-bold focus:border-emerald-500"
+                    />
+                    <span className="block text-[10px] text-slate-400 mt-1">
+                      เช่น 3000 บาท/ปี
+                    </span>
+                  </div>
+
+                  {/* Monthly Surcharge % */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-amber-400" />
+                      <span>คิดเพิ่มเมื่อผ่อนรายเดือน (%) *</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={adminSettings.monthly_surcharge_percent}
+                      onChange={(e) => {
+                        const p = Number(e.target.value) || 0;
+                        const m = Math.round((adminSettings.base_yearly_price / 12) * (1 + p / 100));
+                        setAdminSettings({ ...adminSettings, monthly_surcharge_percent: p, calculated_monthly_price: m });
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm font-bold focus:border-amber-500"
+                    />
+                    <span className="block text-[10px] text-slate-400 mt-1">
+                      เช่น คิดเพิ่ม 30% (สูตร: [ปี÷12] + 30%)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Calculation preview & Save button */}
+                <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-700/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-xs text-slate-300">
+                    💡 ผลลัพธ์: หากร้านเลือกผ่อนรายเดือน จะคิด{' '}
+                    <strong className="text-amber-400 font-mono text-sm">{formatMoney(adminSettings.calculated_monthly_price)} บาท / เดือน</strong>
+                    {' '}(คิดจาก {formatMoney(adminSettings.base_yearly_price)} ÷ 12 = {Math.round(adminSettings.base_yearly_price / 12)} บ. + {adminSettings.monthly_surcharge_percent}%)
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingAdminSettings}
+                    className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-orange-600/30 transition whitespace-nowrap disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingAdminSettings ? 'กำลังบันทึก...' : '💾 บันทึกค่าระบบ & เบอร์โทร'}</span>
+                  </button>
+                </div>
+              </form>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1464,6 +1921,295 @@ export default function SuperAdminPage() {
                   >
                     <Save className="w-3.5 h-3.5" />
                     <span>{savingCreds ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: EDIT STORE DETAILS (NAME, LOGO, PRICING, DISCOUNT, TRIAL) */}
+        {editingStoreModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Edit className="w-5 h-5 text-amber-400" />
+                  <span>แก้ไขข้อมูลร้าน: {editingStoreModal.name}</span>
+                </h3>
+                <button
+                  onClick={() => setEditingStoreModal(null)}
+                  className="text-slate-400 hover:text-white text-lg p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStoreEdit} className="space-y-4 text-xs">
+                {/* Section 1: General Info */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/50 space-y-3">
+                  <div className="font-bold text-slate-300 flex items-center gap-1.5 text-xs">
+                    <StoreIcon className="w-4 h-4 text-orange-400" />
+                    <span>ข้อมูลพื้นฐานของร้านค้า</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">ชื่อร้านค้า *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingStoreModal.name}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, name: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm font-semibold focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1">รูปแบบร้าน</label>
+                      <select
+                        value={editingStoreModal.type}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, type: e.target.value as any })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:border-amber-500"
+                      >
+                        <option value="alacarte">ตามสั่ง / A La Carte</option>
+                        <option value="buffet">บุฟเฟ่ต์จับเวลา (Buffet)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">เบอร์โทรร้าน</label>
+                      <input
+                        type="tel"
+                        value={editingStoreModal.phone}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, phone: e.target.value })}
+                        placeholder="เช่น 089-123-4567"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1">เบอร์พร้อมเพย์รับเงิน</label>
+                      <input
+                        type="text"
+                        value={editingStoreModal.promptpay_number}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, promptpay_number: e.target.value })}
+                        placeholder="เบอร์โทร หรือ เลข ปชช."
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">ที่อยู่ร้านค้า</label>
+                    <input
+                      type="text"
+                      value={editingStoreModal.address}
+                      onChange={(e) => setEditingStoreModal({ ...editingStoreModal, address: e.target.value })}
+                      placeholder="เช่น 123 ถ.สุขุมวิท กทม."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Section 2: Logo with Presets & Preview */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/50 space-y-3">
+                  <div className="font-bold text-slate-300 flex items-center justify-between text-xs">
+                    <span>🖼️ โลโก้ร้านค้า (Store Logo)</span>
+                    <span className="text-[10px] text-slate-400">ใส่ URL หรือเลือกไอคอนสำเร็จรูป</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-800 border-2 border-slate-700 flex-shrink-0 relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={editingStoreModal.logo_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&h=200&fit=crop'}
+                        alt="Logo Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+
+                    <div className="flex-1">
+                      <label className="block text-slate-400 mb-1 text-[11px]">URL รูปภาพโลโก้</label>
+                      <input
+                        type="url"
+                        value={editingStoreModal.logo_url}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, logo_url: e.target.value })}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Logo Presets */}
+                  <div>
+                    <span className="block text-[11px] text-slate-400 mb-1.5 font-medium">โลโก้สำเร็จรูป (คลิกเพื่อเลือกทันใจ):</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {LOGO_PRESETS.map((preset, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => setEditingStoreModal({ ...editingStoreModal, logo_url: preset.url })}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition border ${
+                            editingStoreModal.logo_url === preset.url
+                              ? 'bg-amber-500/30 text-amber-300 border-amber-500 font-bold'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Expiry, Free Trials & Custom Pricing */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/50 space-y-3">
+                  <div className="font-bold text-slate-300 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Gift className="w-4 h-4 text-emerald-400" />
+                      <span>วันหมดอายุ & สิทธิ์ใช้ฟรี / ส่วนลด</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-medium">ปรับเปลี่ยนได้ตลอดเวลา</span>
+                  </div>
+
+                  {/* Expiry Date & Quick Extension Buttons */}
+                  <div>
+                    <label className="block text-slate-400 mb-1">วันหมดอายุของแพ็กเกจ (YYYY-MM-DD)</label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="date"
+                        value={editingStoreModal.plan_expires_at}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, plan_expires_at: e.target.value })}
+                        className="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[10px] text-slate-400 py-1">🎁 เพิ่มสิทธิ์ฟรีทันที:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddTrialDays(30)}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 font-medium text-[11px] transition border border-emerald-500/30"
+                      >
+                        + ฟรี 1 เดือน
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddTrialDays(90)}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 font-bold text-[11px] transition border border-emerald-500/50"
+                      >
+                        + ฟรี 3 เดือน
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddTrialDays(180)}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 font-medium text-[11px] transition border border-emerald-500/30"
+                      >
+                        + ฟรี 6 เดือน
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddTrialDays(365)}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 font-medium text-[11px] transition border border-blue-500/30"
+                      >
+                        + ฟรี 1 ปี
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-slate-400 mb-1">ประเภทการคิดเงิน</label>
+                      <select
+                        value={editingStoreModal.plan_billing_type}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, plan_billing_type: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs"
+                      >
+                        <option value="yearly">รายปี (Yearly)</option>
+                        <option value="monthly">ผ่อนรายเดือน (Monthly)</option>
+                        <option value="trial">ทดลองใช้ฟรี (Trial)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1">ส่วนลดพิเศษเฉพาะร้าน (%)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={editingStoreModal.discount_percent}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, discount_percent: e.target.value })}
+                        placeholder="เช่น 10, 20, 50"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Custom Price Overrides */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-slate-400 mb-1">
+                        ราคารายปีเฉพาะร้าน (บาท/ปี)
+                        <span className="block text-[10px] text-slate-500">มาตรฐาน: {formatMoney(adminSettings.base_yearly_price)} บ.</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={editingStoreModal.custom_price_yearly}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, custom_price_yearly: e.target.value })}
+                        placeholder="เว้นว่าง = ใช้ราคามาตรฐาน"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1">
+                        ราคารายเดือนเฉพาะร้าน (บาท/ด.)
+                        <span className="block text-[10px] text-slate-500">มาตรฐาน: {formatMoney(adminSettings.calculated_monthly_price)} บ.</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={editingStoreModal.custom_price_monthly}
+                        onChange={(e) => setEditingStoreModal({ ...editingStoreModal, custom_price_monthly: e.target.value })}
+                        placeholder="เว้นว่าง = ใช้สูตรมาตรฐาน"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="pt-1">
+                    <label className="block text-slate-400 mb-1">สถานะร้านค้า</label>
+                    <select
+                      value={editingStoreModal.status}
+                      onChange={(e) => setEditingStoreModal({ ...editingStoreModal, status: e.target.value as any })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs"
+                    >
+                      <option value="active">● เปิดใช้งานปกติ (Active)</option>
+                      <option value="suspended">● ระงับการใช้งาน (Suspended)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStoreModal(null)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 font-semibold"
+                  >
+                    ยกเลิก
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={savingStoreEdit}
+                    className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-amber-600/30 transition disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingStoreEdit ? 'กำลังบันทึก...' : '💾 บันทึกข้อมูลร้าน'}</span>
                   </button>
                 </div>
               </form>
