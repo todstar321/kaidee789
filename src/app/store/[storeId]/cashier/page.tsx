@@ -135,11 +135,12 @@ export default function CashierPage({ params }: { params: { storeId: string } })
   // Fetch core data
   const fetchTablesAndStore = async () => {
     try {
+      const t = Date.now();
       const [resStore, resTables, resDiscounts, resPayments] = await Promise.all([
-        fetch(`/api/stores/${params.storeId}`).then((r) => r.json()),
-        fetch(`/api/tables?store_id=${params.storeId}`).then((r) => r.json()),
-        fetch(`/api/discounts?store_id=${params.storeId}`).then((r) => r.json()),
-        fetch(`/api/payment-methods?store_id=${params.storeId}`).then((r) => r.json()),
+        fetch(`/api/stores/${params.storeId}?_t=${t}`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/tables?store_id=${params.storeId}&_t=${t}`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/discounts?store_id=${params.storeId}&_t=${t}`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/payment-methods?store_id=${params.storeId}&_t=${t}`, { cache: 'no-store' }).then((r) => r.json()),
       ]);
 
       if (resStore.id) {

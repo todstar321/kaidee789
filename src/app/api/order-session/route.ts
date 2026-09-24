@@ -4,6 +4,7 @@ import { Store, Table, TableSession, BuffetTier, Category, MenuItem, OrderItem }
 import { getBuffetRemainingMinutes, getElapsedMinutes } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
@@ -147,6 +148,10 @@ export async function GET(req: Request) {
       categories,
       menu_items: menuItems,
       order_items: orderItems,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
     });
   } catch (error) {
     console.error('Failed to get order session:', error);

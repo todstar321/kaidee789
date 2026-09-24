@@ -121,9 +121,12 @@ export default function CustomerOrderPage({
 
       const url = `/api/order-session?store_id=${params.storeId}&table_id=${params.tableId}&token=${params.sessionToken}${
         savedGuestId ? `&guest_id=${savedGuestId}` : ''
-      }`;
+      }&_t=${Date.now()}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
       const json = await res.json();
 
       if (!json.valid) {

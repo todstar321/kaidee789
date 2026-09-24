@@ -56,12 +56,14 @@ export interface Table {
   status: TableStatus;
   current_session_id?: string | null;
   service_call?: ServiceCallType;
+  assigned_staff?: string | null;
 }
 
 export interface Member {
   id: string;
   store_id: string;
   name: string;
+  nickname?: string | null;
   phone: string;
   points: number;
   notes?: string;
@@ -101,6 +103,7 @@ export interface TableSession {
   qr_code_token: string;
   member_id?: string | null;
   member_name?: string | null;
+  member_nickname?: string | null;
   member_phone?: string | null;
 }
 

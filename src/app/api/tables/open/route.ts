@@ -3,11 +3,12 @@ import { queryOne, execute } from '@/lib/db';
 import { Store, Table } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { store_id, table_id, guest_count, buffet_tier_id, member_id, member_name, member_phone } = body;
+    const { store_id, table_id, guest_count, buffet_tier_id, member_id, member_name, member_nickname, member_phone } = body;
 
     if (!store_id || !table_id) {
       return NextResponse.json({ error: 'Missing store_id or table_id' }, { status: 400 });
@@ -39,8 +40,8 @@ export async function POST(req: Request) {
     await execute(`
       INSERT INTO table_sessions (
         id, store_id, table_id, opened_at, guest_count, buffet_tier_id, buffet_end_time, status, qr_code_token,
-        member_id, member_name, member_phone
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+        member_id, member_name, member_nickname, member_phone
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
     `, [
       sessionId,
       store_id,
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
       token,
       member_id || null,
       member_name || null,
+      member_nickname || null,
       member_phone || null,
     ]);
 

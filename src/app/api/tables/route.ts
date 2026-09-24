@@ -3,6 +3,7 @@ import { query } from '@/lib/db';
 import { getElapsedMinutes, getBuffetRemainingMinutes } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
              ts.qr_code_token,
              ts.member_id,
              ts.member_name,
+             ts.member_nickname,
              ts.member_phone,
              bt.name as buffet_tier_name,
              bt.price as buffet_tier_price,
@@ -112,6 +114,7 @@ export async function GET(req: Request) {
         capacity: tbl.capacity,
         status: tbl.status,
         service_call: tbl.service_call || null,
+        assigned_staff: tbl.assigned_staff || null,
         session: tbl.session_id
           ? {
               id: tbl.session_id,
@@ -120,6 +123,7 @@ export async function GET(req: Request) {
               guest_count: guestCount,
               member_id: tbl.member_id || null,
               member_name: tbl.member_name || null,
+              member_nickname: tbl.member_nickname || null,
               member_phone: tbl.member_phone || null,
               buffet_tier_id: tbl.buffet_tier_id,
               buffet_tier_name: tbl.buffet_tier_name,
@@ -139,7 +143,13 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
+      },
+    });
   } catch (error) {
     console.error('Failed to get tables:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
