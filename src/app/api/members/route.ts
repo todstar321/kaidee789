@@ -85,3 +85,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, name, nickname, phone, points, notes } = body;
+
+    if (!id || !name || !phone) {
+      return NextResponse.json({ error: 'กรุณากรอกรหัสสมาชิก ชื่อ และเบอร์โทรศัพท์' }, { status: 400 });
+    }
+
+    await execute(`
+      UPDATE members 
+      SET name = ?,
+          nickname = ?,
+          phone = ?,
+          points = ?,
+          notes = ?
+      WHERE id = ?
+    `, [name, nickname || null, phone, Number(points || 0), notes || '', id]);
+
+    const updated = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
+    if (!updated) {
+      return NextResponse.json({ error: 'ไม่พบข้อมูลสมาชิก' }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      member: updated, 
+      message: 'บันทึกการแก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว' 
+    });
+  } catch (error) {
+    console.error('Failed to update member:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Member id is required' }, { status: 400 });
+    }
+
+    await execute('DELETE FROM members WHERE id = ?', [id]);
+    return NextResponse.json({ success: true, message: 'ลบข้อมูลลูกค้าเรียบร้อยแล้ว' });
+  } catch (error) {
+    console.error('Failed to delete member:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+

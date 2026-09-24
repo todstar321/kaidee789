@@ -20,16 +20,27 @@ import {
   Filter,
   AlertTriangle,
   FileText,
-  DollarSign
+  DollarSign,
+  Key,
+  Activity,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Check,
+  Cpu,
+  Layers,
+  Save,
+  Shuffle
 } from 'lucide-react';
-import { Store, SubscriptionPayment, SuperAdmin } from '@/lib/types';
+import { Store, SubscriptionPayment, SuperAdmin, SubscriptionPlanConfig } from '@/lib/types';
 import { formatMoney, formatThaiDate } from '@/lib/utils';
 
 export default function SuperAdminPage() {
-  const [activeTab, setActiveTab] = useState<'stores' | 'slips' | 'assistants' | 'plans'>('stores');
+  const [activeTab, setActiveTab] = useState<'stores' | 'slips' | 'assistants' | 'plans' | 'keepalive'>('stores');
   const [stores, setStores] = useState<Store[]>([]);
   const [slips, setSlips] = useState<SubscriptionPayment[]>([]);
   const [assistants, setAssistants] = useState<SuperAdmin[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlanConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -39,6 +50,34 @@ export default function SuperAdminPage() {
   const [selectedStoreForClone, setSelectedStoreForClone] = useState<Store | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<SubscriptionPayment | null>(null);
   const [showAddAssistantModal, setShowAddAssistantModal] = useState(false);
+
+  // Store Credentials Modal & Success Modal
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    storeName: string;
+    storeId: string;
+    username: string;
+    password: string;
+    ownerPin: string;
+    cashierPin: string;
+    kitchenPin: string;
+    url: string;
+  } | null>(null);
+
+  const [storeCredsModal, setStoreCredsModal] = useState<{
+    storeId: string;
+    storeName: string;
+    username: string;
+    password: string;
+    ownerPin: string;
+    cashierPin: string;
+    kitchenPin: string;
+  } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingCreds, setSavingCreds] = useState(false);
+
+  // Keepalive test state
+  const [testingWakeup, setTestingWakeup] = useState(false);
+  const [wakeupResult, setWakeupResult] = useState<any>(null);
 
   // Form states
   const [newStoreData, setNewStoreData] = useState({
@@ -50,6 +89,11 @@ export default function SuperAdminPage() {
     plan_id: 'pro',
     plan_billing_type: 'monthly',
     buffet_duration_mins: 120,
+    login_username: '',
+    login_password: '',
+    owner_pin: '1111',
+    cashier_pin: '3333',
+    kitchen_pin: '4444',
   });
 
   const [cloneData, setCloneData] = useState({
@@ -67,18 +111,38 @@ export default function SuperAdminPage() {
 
   const [reviewNotes, setReviewNotes] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [savingPlans, setSavingPlans] = useState(false);
+
+  const generateRandomCredentials = () => {
+    const randomSuffix = Math.random().toString(36).substring(2, 6);
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    let pass = '';
+    for (let i = 0; i < 6; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const storeSlug = newStoreData.name
+      ? newStoreData.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 6)
+      : 'store';
+    setNewStoreData(prev => ({
+      ...prev,
+      login_username: `${storeSlug || 'store'}_${randomSuffix}`,
+      login_password: pass,
+    }));
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resStores, resSlips, resAssistants] = await Promise.all([
+      const [resStores, resSlips, resAssistants, resPlans] = await Promise.all([
         fetch('/api/stores').then(r => r.json()),
         fetch('/api/subscription').then(r => r.json()),
         fetch('/api/super-admin/assistants').then(r => r.json()),
+        fetch('/api/super-admin/plans').then(r => r.json()),
       ]);
       if (Array.isArray(resStores)) setStores(resStores);
       if (Array.isArray(resSlips)) setSlips(resSlips);
       if (Array.isArray(resAssistants)) setAssistants(resAssistants);
+      if (Array.isArray(resPlans)) setPlans(resPlans);
     } catch (e) {
       console.error(e);
     } finally {
@@ -104,6 +168,20 @@ export default function SuperAdminPage() {
       if (data.success) {
         setShowAddStoreModal(false);
         setActionMessage(`สร้างร้านค้า "${newStoreData.name}" สำเร็จเรียบร้อย!`);
+        
+        // Open credentials handover modal
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kaidee789.vercel.app';
+        setCreatedCredentials({
+          storeName: newStoreData.name,
+          storeId: data.store_id,
+          username: data.store?.login_username || newStoreData.login_username || 'user',
+          password: data.store?.login_password || newStoreData.login_password || 'pass',
+          ownerPin: data.store?.owner_pin || newStoreData.owner_pin || '1111',
+          cashierPin: data.store?.cashier_pin || newStoreData.cashier_pin || '3333',
+          kitchenPin: data.store?.kitchen_pin || newStoreData.kitchen_pin || '4444',
+          url: `${origin}/store/${data.store_id}/tables`,
+        });
+
         setNewStoreData({
           name: '',
           type: 'alacarte',
@@ -113,11 +191,109 @@ export default function SuperAdminPage() {
           plan_id: 'pro',
           plan_billing_type: 'monthly',
           buffet_duration_mins: 120,
+          login_username: '',
+          login_password: '',
+          owner_pin: '1111',
+          cashier_pin: '3333',
+          kitchen_pin: '4444',
         });
         fetchData();
+      } else {
+        alert(data.error || 'สร้างร้านค้าไม่สำเร็จ');
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleOpenStoreCreds = async (store: Store) => {
+    try {
+      const res = await fetch(`/api/stores/${store.id}`);
+      const data = await res.json();
+      const ownerStaff = data.staff?.find((s: any) => s.role === 'owner');
+      const cashierStaff = data.staff?.find((s: any) => s.role === 'cashier');
+      const kitchenStaff = data.staff?.find((s: any) => s.role === 'kitchen');
+
+      setStoreCredsModal({
+        storeId: store.id,
+        storeName: store.name,
+        username: data.login_username || store.login_username || '',
+        password: data.login_password || store.login_password || '',
+        ownerPin: ownerStaff?.pin || '1111',
+        cashierPin: cashierStaff?.pin || '3333',
+        kitchenPin: kitchenStaff?.pin || '4444',
+      });
+    } catch (err) {
+      console.error('Failed to load store credentials:', err);
+    }
+  };
+
+  const handleSaveStoreCreds = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storeCredsModal) return;
+    setSavingCreds(true);
+    try {
+      const res = await fetch(`/api/stores/${storeCredsModal.storeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login_username: storeCredsModal.username,
+          login_password: storeCredsModal.password,
+          owner_pin: storeCredsModal.ownerPin,
+          cashier_pin: storeCredsModal.cashierPin,
+          kitchen_pin: storeCredsModal.kitchenPin,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionMessage(`อัปเดตรหัสผ่านและ PIN ของร้าน "${storeCredsModal.storeName}" เรียบร้อยแล้ว`);
+        setStoreCredsModal(null);
+        fetchData();
+      } else {
+        alert('บันทึกไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingCreds(false);
+    }
+  };
+
+  const handleSavePlans = async () => {
+    setSavingPlans(true);
+    try {
+      const res = await fetch('/api/super-admin/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plans),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionMessage('บันทึกการตั้งค่าราคาแพ็กเกจสมาชิกเรียบร้อยแล้ว!');
+        if (Array.isArray(data.plans)) setPlans(data.plans);
+      } else {
+        alert('เกิดข้อผิดพลาดในการบันทึกราคาแพ็กเกจ');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('บันทึกไม่สำเร็จ');
+    } finally {
+      setSavingPlans(false);
+    }
+  };
+
+  const handleTriggerWakeup = async () => {
+    setTestingWakeup(true);
+    try {
+      const res = await fetch('/api/cron/keepalive');
+      const data = await res.json();
+      setWakeupResult(data);
+      setActionMessage('⚡ ปลุกระบบและเช็คสัญญาณฐานข้อมูลเรียบร้อย (เวลาตอบสนอง: ' + data.latency_ms + ' ms)');
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล');
+    } finally {
+      setTestingWakeup(false);
     }
   };
 
@@ -215,6 +391,31 @@ export default function SuperAdminPage() {
     }
   };
 
+  const copyCredsToClipboard = (info: {
+    storeName: string;
+    username: string;
+    password: string;
+    ownerPin: string;
+    cashierPin: string;
+    kitchenPin: string;
+    url: string;
+  }) => {
+    const text = `🎉 รายละเอียดการเข้าใช้งานระบบร้านค้า: ${info.storeName}
+----------------------------------------
+🌐 ลิงก์ระบบร้านอาหาร: ${info.url}
+👤 Username: ${info.username}
+🔑 Password: ${info.password}
+
+🔢 รหัส PIN พนักงาน:
+- เจ้าของร้าน (Owner): ${info.ownerPin}
+- แคชเชียร์ (Cashier): ${info.cashierPin}
+- จอห้องครัว (Kitchen): ${info.kitchenPin}
+----------------------------------------
+ระบบเปิดพร้อมใช้งาน สแกนสั่งอาหาร เช็คบิล และ KDS ครัวสดได้ทันทีครับ`;
+    navigator.clipboard.writeText(text);
+    alert('📋 คัดลอกข้อมูลส่งมอบร้านค้าแล้ว สามารถนำไปวางส่งให้ลูกค้าใน LINE ได้ทันที');
+  };
+
   const pendingSlipsCount = slips.filter(s => s.status === 'pending').length;
 
   const filteredStores = stores.filter(s =>
@@ -242,13 +443,22 @@ export default function SuperAdminPage() {
                 </span>
                 <h1 className="text-lg sm:text-xl font-bold text-white">Super Admin Portal</h1>
               </div>
-              <p className="text-xs text-slate-400">ระบบบริหารร้านอาหาร SaaS & การชำระเงินแพลตฟอร์ม</p>
+              <p className="text-xs text-slate-400">ระบบบริหารร้านอาหาร SaaS, รหัสผ่านร้าน & การตั้งค่าราคาแพลตฟอร์ม</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-medium">
-              ● เข้าใช้งานในฐานะ: เจ้าของแพลตฟอร์ม
+            <button
+              onClick={handleTriggerWakeup}
+              disabled={testingWakeup}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition"
+              title="กดทดสอบส่งสัญญาณปลุกฐานข้อมูลและแอป"
+            >
+              <Activity className={`w-3.5 h-3.5 ${testingWakeup ? 'animate-spin' : ''}`} />
+              <span>ฐานข้อมูล: พร้อมใช้งาน (Daily Keepalive)</span>
+            </button>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-400 font-semibold border border-orange-500/30">
+              ● เจ้าของแพลตฟอร์ม
             </span>
           </div>
         </div>
@@ -257,7 +467,7 @@ export default function SuperAdminPage() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {actionMessage && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm flex items-center justify-between">
+          <div className="mb-6 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm flex items-center justify-between animate-fadeIn">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 flex-shrink-0" />
               <span>{actionMessage}</span>
@@ -274,7 +484,7 @@ export default function SuperAdminPage() {
               <StoreIcon className="w-4 h-4 text-orange-400" />
             </div>
             <div className="text-2xl font-bold text-white">{stores.length}</div>
-            <div className="text-[11px] text-slate-400 mt-1">พร้อมระบบเปิดร้านทันที</div>
+            <div className="text-[11px] text-slate-400 mt-1">พร้อมเปิดโต๊ะและ QR ทันที</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/70">
@@ -297,11 +507,11 @@ export default function SuperAdminPage() {
 
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/70">
             <div className="text-xs text-slate-400 mb-1 flex items-center justify-between">
-              <span>สถานะแพลตฟอร์ม</span>
+              <span>สถานะเซิร์ฟเวอร์ & DB</span>
               <Sparkles className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-bold text-emerald-400">100%</div>
-            <div className="text-[11px] text-slate-400 mt-1">พร้อมให้บริการทุกสาขา</div>
+            <div className="text-[11px] text-slate-400 mt-1">ปลุกระบบทุกวัน (ไม่หลับ)</div>
           </div>
         </div>
 
@@ -357,7 +567,19 @@ export default function SuperAdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>แพ็กเกจ & สิทธิ์ฟังก์ชัน</span>
+            <span>ตั้งราคาแพ็กเกจสมาชิก</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('keepalive')}
+            className={`px-4 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 transition whitespace-nowrap ${
+              activeTab === 'keepalive'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>สถานะ DB & ปลุกระบบ</span>
           </button>
         </div>
 
@@ -382,7 +604,7 @@ export default function SuperAdminPage() {
                   className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-orange-600/25 transition"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>สร้างร้านค้าใหม่</span>
+                  <span>สร้างร้านค้าใหม่ & ตั้งรหัสผ่าน</span>
                 </button>
               </div>
             </div>
@@ -414,7 +636,7 @@ export default function SuperAdminPage() {
                       </span>
                     </div>
 
-                    <div className="space-y-2 text-xs text-slate-300 bg-slate-900/50 p-3 rounded-xl border border-slate-700/40 mb-4">
+                    <div className="space-y-2 text-xs text-slate-300 bg-slate-900/50 p-3 rounded-xl border border-slate-700/40 mb-3">
                       <div className="flex justify-between">
                         <span className="text-slate-400">แพ็กเกจ:</span>
                         <span className="font-semibold text-emerald-400 uppercase">{store.plan_id} ({store.plan_billing_type})</span>
@@ -422,6 +644,12 @@ export default function SuperAdminPage() {
                       <div className="flex justify-between">
                         <span className="text-slate-400">วันหมดอายุ:</span>
                         <span className="font-medium text-slate-200">{formatThaiDate(store.plan_expires_at)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">บัญชีร้าน:</span>
+                        <span className="font-mono text-amber-300">
+                          {store.login_username ? `@${store.login_username}` : 'ยังไม่ตั้งค่า'}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">สถานะ:</span>
@@ -442,7 +670,16 @@ export default function SuperAdminPage() {
                       <span>เข้าจัดการระบบเสมือนเป็นเจ้าของร้าน (Impersonate)</span>
                     </Link>
 
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="grid grid-cols-3 gap-1.5 pt-1">
+                      <button
+                        onClick={() => handleOpenStoreCreds(store)}
+                        className="py-1.5 px-2 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-amber-300 text-xs font-medium flex items-center justify-center gap-1 transition border border-slate-600"
+                        title="ดูและแก้ไข Username, Password และ PIN เจ้าของร้าน/แคชเชียร์/ครัว"
+                      >
+                        <Key className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                        <span>รหัส & PIN</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setSelectedStoreForClone(store);
@@ -453,19 +690,19 @@ export default function SuperAdminPage() {
                           });
                           setShowCloneModal(true);
                         }}
-                        className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium flex items-center justify-center gap-1 transition"
+                        className="py-1.5 px-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium flex items-center justify-center gap-1 transition"
                         title="ก๊อปปี้ร้านค้าเพื่อเปิดให้ลูกค้ารายใหม่"
                       >
-                        <Copy className="w-3 h-3 text-amber-400" />
-                        <span>โคลนร้านนี้</span>
+                        <Copy className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                        <span>โคลนร้าน</span>
                       </button>
 
                       <button
                         onClick={() => handleDeleteStore(store.id, store.name)}
-                        className="py-1.5 px-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1 transition border border-red-500/20"
+                        className="py-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium flex items-center justify-center gap-1 transition border border-red-500/20"
                         title="ลบร้านค้านี้"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3 flex-shrink-0" />
                         <span>ลบ</span>
                       </button>
                     </div>
@@ -603,82 +840,264 @@ export default function SuperAdminPage() {
         {/* TAB 4: PLANS & PRICING CONFIG */}
         {activeTab === 'plans' && (
           <div>
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-white">การกำหนดแพ็กเกจและสิทธิ์ฟังก์ชัน (SaaS Plans & Feature Gating)</h2>
-              <p className="text-xs text-slate-400">กำหนดว่าร้านค้าแต่ละระดับสามารถใช้งานฟังก์ชันอะไรได้บ้าง</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">ตั้งค่าราคาแพ็กเกจสมาชิก (SaaS Subscription Pricing)</h2>
+                <p className="text-xs text-slate-400">Super Admin สามารถปรับเปลี่ยนราคา รายเดือน/รายปี/ซื้อขาด และจำนวนโต๊ะสูงสุดของแต่ละแพ็กเกจได้ตามต้องการ</p>
+              </div>
+
+              <button
+                onClick={handleSavePlans}
+                disabled={savingPlans}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{savingPlans ? 'กำลังบันทึก...' : '💾 บันทึกการเปลี่ยนแปลงราคา'}</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Free Plan */}
-              <div className="p-6 rounded-2xl bg-slate-800 border border-slate-700 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">แพ็กเกจเริ่มต้น</span>
-                  <h3 className="text-xl font-bold text-white mt-1">Free Starter</h3>
-                  <div className="text-2xl font-extrabold text-orange-400 mt-2">฿0 <span className="text-xs text-slate-400 font-normal">/ ตลอดชีพ</span></div>
-                  <p className="text-xs text-slate-400 mt-2">เหมาะสำหรับร้านขนาดเล็กทดลองใช้งาน</p>
+              {plans.map((plan, idx) => (
+                <div
+                  key={plan.id}
+                  className={`p-6 rounded-2xl bg-slate-800 border ${
+                    plan.id === 'pro'
+                      ? 'border-2 border-orange-500 shadow-xl shadow-orange-500/10 relative'
+                      : 'border-slate-700'
+                  } flex flex-col justify-between`}
+                >
+                  {plan.id === 'pro' && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-orange-500 text-white font-bold text-[10px] uppercase">
+                      ยอดนิยมสำหรับร้านอาหาร
+                    </span>
+                  )}
 
-                  <ul className="mt-6 space-y-2.5 text-xs text-slate-300">
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> จำกัดโต๊ะไม่เกิน 5 โต๊ะ</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> สแกนสั่ง QR Code ทั่วไป</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> เมนูอาหารไม่เกิน 30 รายการ</li>
-                    <li className="flex items-center gap-2 text-slate-500"><XCircle className="w-4 h-4 text-slate-500" /> ไม่มีระบบ KDS ครัวสด</li>
-                    <li className="flex items-center gap-2 text-slate-500"><XCircle className="w-4 h-4 text-slate-500" /> ไม่มีระบบบุฟเฟ่ต์จับเวลา</li>
-                    <li className="flex items-center gap-2 text-slate-500"><XCircle className="w-4 h-4 text-slate-500" /> ไม่มีระบบบัญชีต้นทุนและรายจ่าย</li>
-                  </ul>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        {plan.id === 'free' ? 'เริ่มต้นใช้งาน' : plan.id === 'pro' ? 'มืออาชีพ' : 'ตลอดชีพ'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-slate-700 text-orange-400 text-[10px] font-mono font-bold uppercase">
+                        ID: {plan.id}
+                      </span>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-slate-300 mb-1">ชื่อแพ็กเกจ</label>
+                      <input
+                        type="text"
+                        value={plan.name}
+                        onChange={(e) => {
+                          const updated = [...plans];
+                          updated[idx].name = e.target.value;
+                          setPlans(updated);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold focus:border-orange-500"
+                      />
+                    </div>
+
+                    <div className="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 mb-4">
+                      {plan.id !== 'enterprise' && (
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">ราคาต่อเดือน (บาท/เดือน)</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">฿</span>
+                            <input
+                              type="number"
+                              value={plan.price_monthly}
+                              onChange={(e) => {
+                                const updated = [...plans];
+                                updated[idx].price_monthly = Number(e.target.value);
+                                setPlans(updated);
+                              }}
+                              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-semibold focus:border-orange-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {plan.id === 'pro' && (
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">ราคาต่อปี (บาท/ปี)</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">฿</span>
+                            <input
+                              type="number"
+                              value={plan.price_yearly}
+                              onChange={(e) => {
+                                const updated = [...plans];
+                                updated[idx].price_yearly = Number(e.target.value);
+                                setPlans(updated);
+                              }}
+                              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-semibold focus:border-orange-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {plan.id === 'enterprise' && (
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">ราคาซื้อขาด (จ่ายครั้งเดียวจบ)</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">฿</span>
+                            <input
+                              type="number"
+                              value={plan.price_lifetime}
+                              onChange={(e) => {
+                                const updated = [...plans];
+                                updated[idx].price_lifetime = Number(e.target.value);
+                                setPlans(updated);
+                              }}
+                              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-semibold focus:border-orange-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">จำกัดจำนวนโต๊ะสูงสุด (โต๊ะ)</label>
+                        <input
+                          type="number"
+                          value={plan.max_tables}
+                          onChange={(e) => {
+                            const updated = [...plans];
+                            updated[idx].max_tables = Number(e.target.value);
+                            setPlans(updated);
+                          }}
+                          className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-orange-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">คำอธิบายฟังก์ชันที่ได้รับ</label>
+                      <textarea
+                        rows={4}
+                        value={typeof plan.features === 'string' ? plan.features : JSON.stringify(plan.features, null, 2)}
+                        onChange={(e) => {
+                          const updated = [...plans];
+                          updated[idx].features = e.target.value;
+                          setPlans(updated);
+                        }}
+                        placeholder="ระบุสิทธิประโยชน์ของแพ็กเกจ..."
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300 focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Standard Pro Plan */}
-              <div className="p-6 rounded-2xl bg-slate-800 border-2 border-orange-500 relative flex flex-col justify-between shadow-xl shadow-orange-500/10">
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-orange-500 text-white font-bold text-[10px] uppercase">
-                  ยอดนิยมสำหรับร้านอาหาร
-                </span>
-
-                <div>
-                  <span className="text-xs font-bold text-orange-400 uppercase tracking-wider">แพ็กเกจแนะนำ</span>
-                  <h3 className="text-xl font-bold text-white mt-1">Standard Pro</h3>
-                  <div className="text-2xl font-extrabold text-white mt-2">฿590 <span className="text-xs text-slate-400 font-normal">/ เดือน (หรือ ฿5,900/ปี)</span></div>
-                  <p className="text-xs text-slate-400 mt-2">ระบบครบวงจรสำหรับร้านอาหารทุกรูปแบบ</p>
-
-                  <ul className="mt-6 space-y-2.5 text-xs text-slate-300">
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ไม่จำกัดจำนวนโต๊ะและโซน</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ระบบ QR สั่งแยกรายคน (1-A, 1-B)</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> จอห้องครัว KDS แจ้งเตือนเสียงสด</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> โหมดบุฟเฟ่ต์จับเวลา & หลาย Tier ราคา</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> รายงานบัญชี คำนวณต้นทุนอาหาร กำไรสุทธิ</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ระบบพิมพ์ใบเสร็จและตั๋วครัว 80mm/58mm</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Lifetime Enterprise Plan */}
-              <div className="p-6 rounded-2xl bg-slate-800 border border-slate-700 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">แพ็กเกจซื้อขาด</span>
-                  <h3 className="text-xl font-bold text-white mt-1">Enterprise Lifetime</h3>
-                  <div className="text-2xl font-extrabold text-amber-400 mt-2">฿19,900 <span className="text-xs text-slate-400 font-normal">/ จ่ายครั้งเดียวจบ</span></div>
-                  <p className="text-xs text-slate-400 mt-2">เหมาะสำหรับร้านที่ต้องการซื้อขาดไม่มีรายเดือน</p>
-
-                  <ul className="mt-6 space-y-2.5 text-xs text-slate-300">
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ครบทุกฟังก์ชันของ Standard Pro</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ใช้งานได้ตลอดชีพ ไม่มีค่าบริการรายเดือน</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> สิทธิ์ปรับแต่งโลโก้ร้านค้าและโดเมนเต็มรูปแบบ</li>
-                    <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-400" /> ซัพพอร์ตการดูแลระบบแบบพรีเมียม</li>
-                  </ul>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* MODAL: ADD NEW STORE */}
+        {/* TAB 5: KEEPALIVE & DB MONITOR */}
+        {activeTab === 'keepalive' && (
+          <div className="space-y-6">
+            <div className="p-6 rounded-2xl bg-slate-800 border border-slate-700">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-700">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <h2 className="text-lg font-bold text-white">ระบบปลุกฐานข้อมูล & เซิร์ฟเวอร์อัตโนมัติ (Automated Daily Wakeup)</h2>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    แก้ปัญหา Turso Database และ Vercel Serverless Function หลับเมื่อไม่มีคนเข้าร้านหลายวัน
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleTriggerWakeup}
+                  disabled={testingWakeup}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${testingWakeup ? 'animate-spin' : ''}`} />
+                  <span>{testingWakeup ? 'กำลังทดสอบส่งสัญญาณ...' : '⚡ ปลุกระบบและเช็คสัญญาณเดี๋ยวนี้'}</span>
+                </button>
+              </div>
+
+              {/* Status details */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+                <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-700/60">
+                  <div className="text-xs text-slate-400">รอบเวลาปลุกอัตโนมัติ (Vercel Cron)</div>
+                  <div className="text-lg font-bold text-emerald-400 mt-1">ทุกวัน 08:00 น.</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">ตรงกับเวลา 01:00 UTC (`0 1 * * *`)</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-700/60">
+                  <div className="text-xs text-slate-400">ฐานข้อมูลหลัก (Database Host)</div>
+                  <div className="text-lg font-bold text-white mt-1">Turso Cloud</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">Region: AWS Tokyo (Latency ต่ำสุด)</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-700/60">
+                  <div className="text-xs text-slate-400">สถานะความตื่นตัว</div>
+                  <div className="text-lg font-bold text-emerald-400 mt-1">100% Always Active</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">เปิดโต๊ะ สั่งอาหาร ได้เร็วทันใจไม่สะดุด</div>
+                </div>
+              </div>
+
+              {/* Live Wakeup Result display */}
+              {wakeupResult && (
+                <div className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-slate-200">
+                  <div className="font-bold text-emerald-400 mb-2 flex items-center gap-1.5 text-sm">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>ผลการทดสอบส่งสัญญาณปลุกระบบล่าสุด (Ping Result):</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-slate-300">
+                    <div>สถานะ: <strong className="text-emerald-400">{wakeupResult.status}</strong></div>
+                    <div>ความเร็ว (Latency): <strong className="text-white">{wakeupResult.latency_ms} ms</strong></div>
+                    <div>จำนวนร้านค้าใน DB: <strong className="text-white">{wakeupResult.stores_count} ร้าน</strong></div>
+                    <div>เวลาที่ปลุก: <strong className="text-slate-400">{new Date(wakeupResult.timestamp).toLocaleTimeString('th-TH')}</strong></div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-emerald-300/80">
+                    ✓ {wakeupResult.message}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Recent heartbeats table */}
+            {wakeupResult?.recent_heartbeats && wakeupResult.recent_heartbeats.length > 0 && (
+              <div className="p-6 rounded-2xl bg-slate-800 border border-slate-700">
+                <h3 className="font-bold text-white text-sm mb-3 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span>ประวัติการปลุกระบบล่าสุด (Heartbeat History Log)</span>
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900/60 text-slate-400 border-b border-slate-700">
+                      <tr>
+                        <th className="p-2.5">เหตุการณ์</th>
+                        <th className="p-2.5">เวลาส่งสัญญาณ</th>
+                        <th className="p-2.5">Latency (ms)</th>
+                        <th className="p-2.5">ข้อความ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {wakeupResult.recent_heartbeats.map((hb: any) => (
+                        <tr key={hb.id} className="hover:bg-slate-700/20">
+                          <td className="p-2.5 font-medium text-emerald-400">{hb.event}</td>
+                          <td className="p-2.5 text-slate-300">{new Date(hb.created_at).toLocaleString('th-TH')}</td>
+                          <td className="p-2.5 font-mono text-white">{hb.latency_ms} ms</td>
+                          <td className="p-2.5 text-slate-400">{hb.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MODAL: ADD NEW STORE WITH CREDENTIALS */}
         {showAddStoreModal && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
               <div className="flex items-center justify-between pb-4 border-b border-slate-700 mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <StoreIcon className="w-5 h-5 text-orange-400" />
-                  <span>สร้างร้านค้าใหม่ในระบบ</span>
+                  <span>สร้างร้านค้าใหม่ & กำหนดรหัสผ่าน</span>
                 </h3>
                 <button onClick={() => setShowAddStoreModal(false)} className="text-slate-400 hover:text-white">✕</button>
               </div>
@@ -728,9 +1147,9 @@ export default function SuperAdminPage() {
                       onChange={(e) => setNewStoreData({ ...newStoreData, plan_id: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
                     >
-                      <option value="free">Free Starter</option>
+                      <option value="free">Free Starter (฿0)</option>
                       <option value="pro">Standard Pro</option>
-                      <option value="enterprise">Enterprise</option>
+                      <option value="enterprise">Enterprise Lifetime</option>
                     </select>
                   </div>
 
@@ -745,6 +1164,83 @@ export default function SuperAdminPage() {
                       <option value="yearly">รายปี</option>
                       <option value="lifetime">ซื้อขาด</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* LOGIN CREDENTIALS & PINS SECTION */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-orange-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Key className="w-4 h-4 text-orange-400" />
+                      <span className="text-xs font-bold text-white">ข้อมูลบัญชีร้านค้า & รหัส PIN</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={generateRandomCredentials}
+                      className="text-[11px] px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 flex items-center gap-1 transition"
+                    >
+                      <Shuffle className="w-3 h-3" />
+                      <span>สุ่ม Username / รหัสผ่าน</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Username ร้านค้า</label>
+                      <input
+                        type="text"
+                        placeholder="เช่น myrestaurant"
+                        value={newStoreData.login_username}
+                        onChange={(e) => setNewStoreData({ ...newStoreData, login_username: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:border-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Password ร้านค้า</label>
+                      <input
+                        type="text"
+                        placeholder="กำหนดรหัสผ่าน"
+                        value={newStoreData.login_password}
+                        onChange={(e) => setNewStoreData({ ...newStoreData, login_password: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:border-orange-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800">
+                    <span className="block text-[11px] text-slate-400 mb-2">กำหนดรหัส PIN พนักงาน (4 หลัก)</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">PIN เจ้าของ</label>
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={newStoreData.owner_pin}
+                          onChange={(e) => setNewStoreData({ ...newStoreData, owner_pin: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-center font-mono text-xs text-orange-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">PIN แคชเชียร์</label>
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={newStoreData.cashier_pin}
+                          onChange={(e) => setNewStoreData({ ...newStoreData, cashier_pin: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-center font-mono text-xs text-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">PIN ครัว</label>
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={newStoreData.kitchen_pin}
+                          onChange={(e) => setNewStoreData({ ...newStoreData, kitchen_pin: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-center font-mono text-xs text-emerald-400"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -783,6 +1279,191 @@ export default function SuperAdminPage() {
                     className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold shadow-lg shadow-orange-600/30"
                   >
                     ยืนยันสร้างร้านค้า
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: POST-CREATION CREDENTIALS HANDOVER */}
+        {createdCredentials && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-slate-800 border-2 border-emerald-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+              <div className="text-center pb-4 border-b border-slate-700 mb-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white">สร้างร้านค้าสำเร็จเรียบร้อย!</h3>
+                <p className="text-xs text-slate-400">ข้อมูลเข้าใช้งานสำหรับส่งมอบให้ร้านค้า</p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 space-y-2.5 text-xs text-slate-300 font-mono mb-4">
+                <div className="flex justify-between font-sans">
+                  <span className="text-slate-400">ร้าน:</span>
+                  <span className="font-bold text-white">{createdCredentials.storeName}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">ลิงก์ร้านค้า:</span>
+                  <a
+                    href={createdCredentials.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-orange-400 hover:underline truncate max-w-[200px]"
+                  >
+                    {createdCredentials.url}
+                  </a>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Username:</span>
+                  <span className="font-bold text-amber-300">{createdCredentials.username}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Password:</span>
+                  <span className="font-bold text-white bg-slate-800 px-2 py-0.5 rounded">{createdCredentials.password}</span>
+                </div>
+                <div className="pt-2 border-t border-slate-800 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-sans">PIN เจ้าของ</div>
+                    <div className="font-bold text-orange-400">{createdCredentials.ownerPin}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-sans">PIN แคชเชียร์</div>
+                    <div className="font-bold text-blue-400">{createdCredentials.cashierPin}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-sans">PIN ครัว</div>
+                    <div className="font-bold text-emerald-400">{createdCredentials.kitchenPin}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => copyCredsToClipboard(createdCredentials)}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>📋 คัดลอกข้อมูลทั้งหมดเพื่อส่งให้ลูกค้า (LINE)</span>
+                </button>
+                <button
+                  onClick={() => setCreatedCredentials(null)}
+                  className="w-full py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold"
+                >
+                  เสร็จสิ้น / ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: VIEW / EDIT STORE CREDENTIALS & PINS */}
+        {storeCredsModal && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Key className="w-5 h-5 text-amber-400" />
+                  <span>รหัสผ่าน & PIN: {storeCredsModal.storeName}</span>
+                </h3>
+                <button onClick={() => setStoreCredsModal(null)} className="text-slate-400 hover:text-white">✕</button>
+              </div>
+
+              <form onSubmit={handleSaveStoreCreds} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">Username ร้านค้า</label>
+                  <input
+                    type="text"
+                    value={storeCredsModal.username}
+                    onChange={(e) => setStoreCredsModal({ ...storeCredsModal, username: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-400">Password ร้านค้า</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px]"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showPassword ? 'ซ่อนรหัส' : 'แสดงรหัส'}</span>
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={storeCredsModal.password}
+                    onChange={(e) => setStoreCredsModal({ ...storeCredsModal, password: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-mono"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-700/50 space-y-2">
+                  <span className="block text-slate-400 font-medium">รหัส PIN 4 หลักประจำตำแหน่ง</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">PIN เจ้าของ</label>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={storeCredsModal.ownerPin}
+                        onChange={(e) => setStoreCredsModal({ ...storeCredsModal, ownerPin: e.target.value })}
+                        className="w-full px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-center font-mono text-orange-400 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">PIN แคชเชียร์</label>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={storeCredsModal.cashierPin}
+                        onChange={(e) => setStoreCredsModal({ ...storeCredsModal, cashierPin: e.target.value })}
+                        className="w-full px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-center font-mono text-blue-400 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-0.5">PIN ห้องครัว</label>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={storeCredsModal.kitchenPin}
+                        onChange={(e) => setStoreCredsModal({ ...storeCredsModal, kitchenPin: e.target.value })}
+                        className="w-full px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-center font-mono text-emerald-400 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kaidee789.vercel.app';
+                      copyCredsToClipboard({
+                        storeName: storeCredsModal.storeName,
+                        username: storeCredsModal.username,
+                        password: storeCredsModal.password,
+                        ownerPin: storeCredsModal.ownerPin,
+                        cashierPin: storeCredsModal.cashierPin,
+                        kitchenPin: storeCredsModal.kitchenPin,
+                        url: `${origin}/store/${storeCredsModal.storeId}/tables`,
+                      });
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>คัดลอกส่งลูกค้า</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={savingCreds}
+                    className="flex-1 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-semibold flex items-center justify-center gap-1.5 shadow transition disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingCreds ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
                   </button>
                 </div>
               </form>

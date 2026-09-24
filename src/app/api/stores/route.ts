@@ -27,7 +27,22 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, type, phone, address, promptpay_number, promptpay_name, buffet_duration_mins, plan_id, plan_billing_type } = body;
+    const {
+      name,
+      type,
+      phone,
+      address,
+      promptpay_number,
+      promptpay_name,
+      buffet_duration_mins,
+      plan_id,
+      plan_billing_type,
+      login_username,
+      login_password,
+      owner_pin,
+      cashier_pin,
+      kitchen_pin,
+    } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Store name is required' }, { status: 400 });
@@ -36,6 +51,13 @@ export async function POST(req: Request) {
     const id = 'store_' + Math.random().toString(36).substring(2, 9);
     const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000);
     const now = new Date().toISOString();
+
+    // Default username / password if not specified
+    const finalUsername = login_username?.trim() || ('user_' + Math.random().toString(36).substring(2, 8));
+    const finalPassword = login_password?.trim() || Math.random().toString(36).substring(2, 8);
+    const finalOwnerPin = (owner_pin?.trim() && owner_pin.length === 4) ? owner_pin.trim() : '1111';
+    const finalCashierPin = (cashier_pin?.trim() && cashier_pin.length === 4) ? cashier_pin.trim() : '3333';
+    const finalKitchenPin = (kitchen_pin?.trim() && kitchen_pin.length === 4) ? kitchen_pin.trim() : '4444';
 
     const expireDate = new Date();
     if (plan_billing_type === 'yearly') {
@@ -49,8 +71,9 @@ export async function POST(req: Request) {
     await execute(`
       INSERT INTO stores (
         id, name, slug, type, logo_url, cover_url, phone, address, promptpay_number, promptpay_name,
-        buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        buffet_duration_mins, plan_id, plan_billing_type, plan_expires_at, status, created_at,
+        login_username, login_password
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       name,
@@ -67,17 +90,19 @@ export async function POST(req: Request) {
       plan_billing_type || 'monthly',
       expireDate.toISOString(),
       'active',
-      now
+      now,
+      finalUsername,
+      finalPassword
     ]);
 
-    // Create default staff
+    // Create default staff with custom PINs
     const stf1 = 'stf_' + Math.random().toString(36).substring(2, 7);
     const stf2 = 'stf_' + Math.random().toString(36).substring(2, 7);
     const stf3 = 'stf_' + Math.random().toString(36).substring(2, 7);
 
-    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf1, id, 'เจ้าของร้าน', '1111', 'owner']);
-    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf2, id, 'แคชเชียร์', '3333', 'cashier']);
-    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf3, id, 'ห้องครัว', '4444', 'kitchen']);
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf1, id, 'เจ้าของร้าน', finalOwnerPin, 'owner']);
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf2, id, 'แคชเชียร์', finalCashierPin, 'cashier']);
+    await execute('INSERT INTO store_staff (id, store_id, name, pin, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [stf3, id, 'ห้องครัว', finalKitchenPin, 'kitchen']);
 
     // Create 4 initial tables
     for (let i = 1; i <= 4; i++) {
@@ -99,7 +124,20 @@ export async function POST(req: Request) {
       `, ['tier_' + id + '_prm', id]);
     }
 
-    return NextResponse.json({ success: true, store_id: id });
+    return NextResponse.json({
+      success: true,
+      store_id: id,
+      store: {
+        id,
+        name,
+        slug,
+        login_username: finalUsername,
+        login_password: finalPassword,
+        owner_pin: finalOwnerPin,
+        cashier_pin: finalCashierPin,
+        kitchen_pin: finalKitchenPin,
+      }
+    });
   } catch (error) {
     console.error('Failed to create store:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

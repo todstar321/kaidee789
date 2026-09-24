@@ -54,7 +54,9 @@ export async function PUT(
           status = COALESCE(?, status),
           plan_id = COALESCE(?, plan_id),
           plan_billing_type = COALESCE(?, plan_billing_type),
-          plan_expires_at = COALESCE(?, plan_expires_at)
+          plan_expires_at = COALESCE(?, plan_expires_at),
+          login_username = COALESCE(?, login_username),
+          login_password = COALESCE(?, login_password)
       WHERE id = ?
     `, [
       body.name,
@@ -71,8 +73,21 @@ export async function PUT(
       body.plan_id,
       body.plan_billing_type,
       body.plan_expires_at,
+      body.login_username !== undefined ? body.login_username : null,
+      body.login_password !== undefined ? body.login_password : null,
       params.storeId
     ]);
+
+    // Update staff PINs if provided
+    if (body.owner_pin && body.owner_pin.length === 4) {
+      await execute('UPDATE store_staff SET pin = ? WHERE store_id = ? AND role = "owner"', [body.owner_pin, params.storeId]);
+    }
+    if (body.cashier_pin && body.cashier_pin.length === 4) {
+      await execute('UPDATE store_staff SET pin = ? WHERE store_id = ? AND role = "cashier"', [body.cashier_pin, params.storeId]);
+    }
+    if (body.kitchen_pin && body.kitchen_pin.length === 4) {
+      await execute('UPDATE store_staff SET pin = ? WHERE store_id = ? AND role = "kitchen"', [body.kitchen_pin, params.storeId]);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

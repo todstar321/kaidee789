@@ -34,8 +34,21 @@ export interface Store {
   plan_id: PlanType;
   plan_billing_type: BillingCycle;
   plan_expires_at: string;
+  login_username?: string;
+  login_password?: string;
   status: 'active' | 'suspended';
   created_at: string;
+}
+
+export interface SubscriptionPlanConfig {
+  id: PlanType;
+  name: string;
+  price_monthly: number;
+  price_yearly: number;
+  price_lifetime: number;
+  max_tables: number;
+  features: string[] | string;
+  is_active: number;
 }
 
 export interface StoreStaff {

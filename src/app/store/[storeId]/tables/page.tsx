@@ -28,7 +28,8 @@ import {
   ArrowRight,
   Layers,
   LayoutGrid,
-  UserPlus
+  UserPlus,
+  Edit2
 } from 'lucide-react';
 import { Store, Table, BuffetTier, Member, TableStatus, ServiceCallType } from '@/lib/types';
 import { formatMoney, formatThaiTime, cn } from '@/lib/utils';
@@ -100,6 +101,14 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
   const [newMemberNickname, setNewMemberNickname] = useState('');
   const [newMemberPhone, setNewMemberPhone] = useState('');
   const [newMemberNotes, setNewMemberNotes] = useState('');
+  
+  // Edit Member in Open Table Modal State
+  const [isEditingMember, setIsEditingMember] = useState(false);
+  const [editMemberName, setEditMemberName] = useState('');
+  const [editMemberNickname, setEditMemberNickname] = useState('');
+  const [editMemberPhone, setEditMemberPhone] = useState('');
+  const [editMemberNotes, setEditMemberNotes] = useState('');
+  const [isSavingMemberEdit, setIsSavingMemberEdit] = useState(false);
 
   // Assign Staff Modal State
   const [assignStaffModalTarget, setAssignStaffModalTarget] = useState<{
@@ -246,6 +255,50 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleStartEditMember = (m: Member) => {
+    setEditMemberName(m.name);
+    setEditMemberNickname(m.nickname || '');
+    setEditMemberPhone(m.phone);
+    setEditMemberNotes(m.notes || '');
+    setIsEditingMember(true);
+  };
+
+  const handleSaveMemberEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember || !editMemberName.trim() || !editMemberPhone.trim()) {
+      alert('กรุณากรอกชื่อและเบอร์โทรศัพท์');
+      return;
+    }
+
+    setIsSavingMemberEdit(true);
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedMember.id,
+          name: editMemberName.trim(),
+          nickname: editMemberNickname.trim() || null,
+          phone: editMemberPhone.trim(),
+          notes: editMemberNotes.trim(),
+          points: selectedMember.points || 0,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.member) {
+        setSelectedMember(data.member);
+        setIsEditingMember(false);
+      } else {
+        alert(data.error || 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } finally {
+      setIsSavingMemberEdit(false);
     }
   };
 
@@ -1153,32 +1206,127 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                 {openCustomerType === 'member' && (
                   <div className="space-y-3 pt-2">
                     {selectedMember ? (
-                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
-                        <div>
-                          <div className="font-extrabold text-amber-950 text-sm flex items-center gap-1.5">
-                            <Sparkles className="w-4 h-4 text-amber-600" />
-                            <span>คุณ{selectedMember.name}</span>
-                            {selectedMember.nickname && (
-                              <span className="text-amber-800 font-bold">({selectedMember.nickname})</span>
+                      isEditingMember ? (
+                        <form onSubmit={handleSaveMemberEdit} className="p-3 bg-white rounded-xl border-2 border-amber-400 space-y-2.5 text-xs shadow-sm">
+                          <div className="flex items-center justify-between border-b border-amber-100 pb-1.5">
+                            <span className="font-extrabold text-amber-950 flex items-center gap-1">
+                              <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                              <span>แก้ไขข้อมูลลูกค้า</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingMember(false)}
+                              className="text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              ✕ ปิด
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">ชื่อ-นามสกุล *</label>
+                              <input
+                                type="text"
+                                required
+                                value={editMemberName}
+                                onChange={(e) => setEditMemberName(e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">ชื่อเล่น</label>
+                              <input
+                                type="text"
+                                placeholder="เช่น พี่ต้น, แนน"
+                                value={editMemberNickname}
+                                onChange={(e) => setEditMemberNickname(e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">เบอร์โทรศัพท์ *</label>
+                            <input
+                              type="tel"
+                              required
+                              value={editMemberPhone}
+                              onChange={(e) => setEditMemberPhone(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-0.5">หมายเหตุ / แพ้อาหาร</label>
+                            <input
+                              type="text"
+                              placeholder="เช่น ไม่ทานเผ็ด, แพ้ถั่ว"
+                              value={editMemberNotes}
+                              onChange={(e) => setEditMemberNotes(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingMember(false)}
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs"
+                            >
+                              ยกเลิก
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSavingMemberEdit}
+                              className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center gap-1 shadow text-xs"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{isSavingMemberEdit ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}</span>
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-start justify-between text-xs">
+                          <div>
+                            <div className="font-extrabold text-amber-950 text-sm flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-amber-600" />
+                              <span>คุณ{selectedMember.name}</span>
+                              {selectedMember.nickname && (
+                                <span className="text-amber-800 font-bold">({selectedMember.nickname})</span>
+                              )}
+                            </div>
+                            <div className="text-amber-800 mt-0.5">
+                              เบอร์: <strong>{selectedMember.phone}</strong> | แต้มสะสม: {selectedMember.points || 0} แต้ม
+                            </div>
+                            {selectedMember.notes && (
+                              <div className="text-[11px] text-slate-600 italic mt-0.5">
+                                หมายเหตุ: {selectedMember.notes}
+                              </div>
                             )}
                           </div>
-                          <div className="text-amber-800 mt-0.5">
-                            เบอร์: {selectedMember.phone} | แต้มสะสม: {selectedMember.points || 0} แต้ม
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditMember(selectedMember)}
+                              className="px-2 py-1 bg-amber-200/80 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                              title="แก้ไขชื่อเล่น, เบอร์โทร หรือข้อมูลลูกค้า"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>แก้ไข</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMember(null);
+                                setIsEditingMember(false);
+                              }}
+                              className="px-2 py-1 text-xs text-red-600 font-bold hover:bg-red-50 rounded-lg transition"
+                            >
+                              เปลี่ยน
+                            </button>
                           </div>
-                          {selectedMember.notes && (
-                            <div className="text-[11px] text-slate-500 italic mt-0.5">
-                              หมายเหตุ: {selectedMember.notes}
-                            </div>
-                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMember(null)}
-                          className="text-xs text-red-600 font-bold hover:underline"
-                        >
-                          เปลี่ยน
-                        </button>
-                      </div>
+                      )
                     ) : (
                       <>
                         <div className="relative">

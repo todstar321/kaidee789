@@ -16,7 +16,8 @@ import {
   Flame,
   Clock,
   AlertCircle,
-  ShieldAlert
+  ShieldAlert,
+  Users
 } from 'lucide-react';
 import { Store, StoreStaff, StaffRole } from '@/lib/types';
 
@@ -107,6 +108,12 @@ export default function StoreLayout({
       label: 'บัญชี & สรุปกำไร',
       icon: PieChart,
       color: 'text-rose-500',
+    },
+    {
+      href: `/store/${params.storeId}/customers`,
+      label: 'ลูกค้า & สมาชิก',
+      icon: Users,
+      color: 'text-amber-500',
     },
     {
       href: `/store/${params.storeId}/settings`,
