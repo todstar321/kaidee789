@@ -20,10 +20,11 @@ import {
   DollarSign,
   Info,
   Lock,
-  ChevronRight
+  ChevronRight,
+  Receipt
 } from 'lucide-react';
 import { MenuItem, Category, OrderItem, BuffetTier } from '@/lib/types';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, cn } from '@/lib/utils';
 import { playSound } from '@/lib/sound';
 
 interface OrderSessionData {
@@ -107,6 +108,7 @@ export default function CustomerOrderPage({
   // Notifications & Alerts
   const [readyAlertDish, setReadyAlertDish] = useState<string | null>(null);
   const [billCalled, setBillCalled] = useState(false);
+  const [waiterCalled, setWaiterCalled] = useState(false);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
 
   // Track previous ready items to trigger alert chime
@@ -253,6 +255,26 @@ export default function CustomerOrderPage({
       });
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Call Waiter
+  const handleCallWaiter = async () => {
+    if (!data) return;
+    try {
+      const res = await fetch('/api/cashier/call-waiter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table_id: params.tableId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        playSound('bell');
+        setWaiterCalled(true);
+        setTimeout(() => setWaiterCalled(false), 20000);
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -686,22 +708,43 @@ export default function CustomerOrderPage({
         </main>
       )}
 
-      {/* 2. Floating Action Bar (View Cart & Call Bill) */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-2xl p-3">
-        <div className="max-w-md mx-auto flex items-center gap-2">
+      {/* 2. Floating Action Bar (View Cart & Call Staff / Call Bill) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-2xl p-2.5 sm:p-3">
+        <div className="max-w-md mx-auto flex items-center gap-1.5 sm:gap-2">
+          {/* Call Waiter Button */}
+          <button
+            onClick={handleCallWaiter}
+            className={cn(
+              "py-3 px-2.5 sm:px-3 rounded-2xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition flex-shrink-0 border shadow-sm",
+              waiterCalled
+                ? "bg-amber-500 text-white border-amber-600 animate-pulse"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+            )}
+            title="กดเพื่อเรียกพนักงานมาที่โต๊ะ"
+          >
+            <BellRing className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
+            <span>{waiterCalled ? 'พนักงานกำลังมา' : 'เรียกพนักงาน'}</span>
+          </button>
+
           {/* Call Bill Button */}
           <button
             onClick={handleCallBill}
-            className="py-3 px-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition flex-shrink-0"
+            className={cn(
+              "py-3 px-2.5 sm:px-3 rounded-2xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition flex-shrink-0 border shadow-sm",
+              billCalled
+                ? "bg-rose-600 text-white border-rose-700 animate-pulse"
+                : "bg-slate-800 hover:bg-slate-700 text-white border-slate-700"
+            )}
+            title="กดเพื่อแจ้งพนักงานคิดเงิน"
           >
-            <BellRing className="w-4 h-4 text-amber-400" />
-            <span>เรียกเช็กบิล</span>
+            <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+            <span>{billCalled ? 'แจ้งคิดเงินแล้ว' : 'เรียกเช็กบิล'}</span>
           </button>
 
           {/* View Cart Button */}
           <button
             onClick={() => setShowCartDrawer(true)}
-            className="flex-1 py-3 px-4 rounded-2xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs sm:text-sm flex items-center justify-between shadow-lg shadow-orange-600/25 transition"
+            className="flex-1 py-3 px-3 sm:px-4 rounded-2xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs sm:text-sm flex items-center justify-between shadow-lg shadow-orange-600/25 transition min-w-0"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />

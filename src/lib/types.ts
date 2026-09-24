@@ -2,6 +2,7 @@ export type StoreType = 'alacarte' | 'buffet' | 'hybrid';
 export type PlanType = 'free' | 'pro' | 'enterprise';
 export type BillingCycle = 'monthly' | 'yearly' | 'lifetime';
 export type TableStatus = 'available' | 'occupied' | 'billing_requested';
+export type ServiceCallType = 'call_waiter' | 'call_bill' | null;
 export type OrderItemStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
 export type StaffRole = 'owner' | 'manager' | 'cashier' | 'kitchen' | 'waiter';
 
@@ -26,6 +27,9 @@ export interface Store {
   address: string;
   promptpay_number: string;
   promptpay_name: string;
+  promptpay_qr_url?: string;
+  service_charge_percent?: number;
+  vat_percent?: number;
   buffet_duration_mins: number; // e.g. 120
   plan_id: PlanType;
   plan_billing_type: BillingCycle;
@@ -51,6 +55,37 @@ export interface Table {
   capacity: number;
   status: TableStatus;
   current_session_id?: string | null;
+  service_call?: ServiceCallType;
+}
+
+export interface Member {
+  id: string;
+  store_id: string;
+  name: string;
+  phone: string;
+  points: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface StoreDiscount {
+  id: string;
+  store_id: string;
+  name: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  is_active: number;
+  created_at: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  store_id: string;
+  name: string;
+  code: string;
+  is_system: number;
+  is_active: number;
+  sort_order: number;
 }
 
 export interface TableSession {
@@ -64,6 +99,9 @@ export interface TableSession {
   buffet_end_time?: string | null;
   status: 'active' | 'completed' | 'cancelled';
   qr_code_token: string;
+  member_id?: string | null;
+  member_name?: string | null;
+  member_phone?: string | null;
 }
 
 export interface Guest {
@@ -91,6 +129,7 @@ export interface MenuItem {
   description: string;
   price: number;
   cost_price: number; // ต้นทุน สำหรับคำนวณกำไร
+  cooking_time_mins?: number; // ระยะเวลาทำอาหาร (นาที)
   image_url: string;
   is_available: number;
   min_buffet_tier_id?: string | null; // e.g. require tier_premium or above
@@ -109,6 +148,7 @@ export interface OrderItem {
   quantity: number;
   price: number;
   cost_price: number;
+  cooking_time_mins?: number;
   selected_options?: string;
   notes?: string;
   status: OrderItemStatus;
@@ -153,11 +193,14 @@ export interface Invoice {
   vat_amount: number;
   service_charge: number;
   grand_total: number;
-  payment_method: 'cash' | 'promptpay' | 'card';
+  payment_method: string;
   cash_received: number;
   change_given: number;
   paid_at: string;
   staff_name?: string;
+  member_id?: string | null;
+  member_name?: string | null;
+  discount_details?: string;
 }
 
 export interface Expense {

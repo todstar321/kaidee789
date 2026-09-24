@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     }
 
     // Add Menu Item
-    const { name, category_id, description, price, cost_price, image_url, min_buffet_tier_id, options_json } = body;
+    const { name, category_id, description, price, cost_price, cooking_time_mins, image_url, min_buffet_tier_id, options_json } = body;
     if (!name || !category_id) {
       return NextResponse.json({ error: 'ชื่อเมนูและหมวดหมู่จำเป็นต้องระบุ' }, { status: 400 });
     }
@@ -56,8 +56,8 @@ export async function POST(req: Request) {
     const id = 'm_' + Math.random().toString(36).substring(2, 9);
     await execute(`
       INSERT INTO menu_items (
-        id, store_id, category_id, name, description, price, cost_price, image_url, is_available, min_buffet_tier_id, options_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        id, store_id, category_id, name, description, price, cost_price, cooking_time_mins, image_url, is_available, min_buffet_tier_id, options_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
     `, [
       id,
       store_id,
@@ -66,6 +66,7 @@ export async function POST(req: Request) {
       description || '',
       Number(price || 0),
       Number(cost_price || 0),
+      Number(cooking_time_mins || 10),
       image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=400&fit=crop',
       min_buffet_tier_id || null,
       options_json || ''
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, category_id, description, price, cost_price, image_url, is_available, min_buffet_tier_id } = body;
+    const { id, name, category_id, description, price, cost_price, cooking_time_mins, image_url, is_available, min_buffet_tier_id } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Item id is required' }, { status: 400 });
@@ -94,6 +95,7 @@ export async function PUT(req: Request) {
           description = COALESCE(?, description),
           price = COALESCE(?, price),
           cost_price = COALESCE(?, cost_price),
+          cooking_time_mins = COALESCE(?, cooking_time_mins),
           image_url = COALESCE(?, image_url),
           is_available = COALESCE(?, is_available),
           min_buffet_tier_id = ?
@@ -104,6 +106,7 @@ export async function PUT(req: Request) {
       description,
       price !== undefined ? Number(price) : null,
       cost_price !== undefined ? Number(cost_price) : null,
+      cooking_time_mins !== undefined ? Number(cooking_time_mins) : null,
       image_url,
       is_available !== undefined ? Number(is_available) : null,
       min_buffet_tier_id !== undefined ? min_buffet_tier_id : null,

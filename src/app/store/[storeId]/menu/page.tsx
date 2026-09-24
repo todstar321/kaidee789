@@ -40,6 +40,7 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
     description: '',
     price: 89,
     cost_price: 35,
+    cooking_time_mins: 10,
     image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=400&fit=crop',
     min_buffet_tier_id: '',
   });
@@ -198,6 +199,7 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
                 description: '',
                 price: 89,
                 cost_price: 35,
+                cooking_time_mins: 10,
                 image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&h=400&fit=crop',
                 min_buffet_tier_id: '',
               });
@@ -277,7 +279,12 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
                     <div className="flex items-start justify-between gap-1">
                       <h4 className="font-extrabold text-slate-900 text-sm leading-snug">{item.name}</h4>
                     </div>
-                    <span className="text-[11px] text-slate-500 block mt-0.5">{cat?.name}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-slate-500">{cat?.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 font-bold flex items-center gap-0.5">
+                        ⏱️ {item.cooking_time_mins || 10} นาที
+                      </span>
+                    </div>
                     <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">{item.description}</p>
                   </div>
                 </div>
@@ -338,6 +345,7 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
                         description: item.description,
                         price: item.price,
                         cost_price: item.cost_price,
+                        cooking_time_mins: item.cooking_time_mins || 10,
                         image_url: item.image_url,
                         min_buffet_tier_id: item.min_buffet_tier_id || '',
                       });
@@ -424,6 +432,20 @@ export default function MenuManagementPage({ params }: { params: { storeId: stri
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-orange-500"
                   />
                   <span className="text-[10px] text-slate-400">สำหรับคำนวณกำไรสุทธิ</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">⏱️ เวลาทำอาหาร (นาที) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={180}
+                    value={itemForm.cooking_time_mins}
+                    onChange={(e) => setItemForm({ ...itemForm, cooking_time_mins: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-orange-500"
+                  />
+                  <span className="text-[10px] text-slate-400">เมื่อเกินเวลานี้ ระบบจะแจ้งเตือนสีแดง</span>
                 </div>
               </div>
 

@@ -21,7 +21,8 @@ export async function GET(req: Request) {
              g.guest_label,
              g.nickname as guest_nickname,
              m.image_url,
-             m.cost_price as default_cost
+             m.cost_price as default_cost,
+             COALESCE(oi.cooking_time_mins, m.cooking_time_mins, 10) as cooking_time_mins
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
       JOIN tables t ON o.table_id = t.id
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
       table_number: string;
       table_zone: string;
       image_url: string;
+      cooking_time_mins: number;
     }>(sql, params);
 
     return NextResponse.json(items);
@@ -96,12 +98,13 @@ export async function POST(req: Request) {
     // Create Order Items
     for (const itm of items) {
       const orderItemId = 'oi_' + Math.random().toString(36).substring(2, 9);
+      const cookingLimit = Number(itm.cooking_time_mins || 10);
       await execute(`
         INSERT INTO order_items (
           id, order_id, session_id, guest_id, guest_label, guest_nickname,
-          menu_item_id, item_name, quantity, price, cost_price,
+          menu_item_id, item_name, quantity, price, cost_price, cooking_time_mins,
           selected_options, notes, status, customer_received, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
       `, [
         orderItemId,
         orderId,
@@ -114,6 +117,7 @@ export async function POST(req: Request) {
         Number(itm.quantity || 1),
         Number(itm.price || 0),
         Number(itm.cost_price || 0),
+        cookingLimit,
         itm.selected_options || '',
         itm.notes || '',
         now

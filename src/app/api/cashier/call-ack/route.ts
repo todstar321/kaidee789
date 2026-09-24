@@ -12,14 +12,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing table_id' }, { status: 400 });
     }
 
-    await execute("UPDATE tables SET status = 'billing_requested', service_call = 'call_bill' WHERE id = ?", [table_id]);
+    await execute(`
+      UPDATE tables 
+      SET service_call = NULL,
+          status = CASE WHEN status = 'billing_requested' THEN 'occupied' ELSE status END
+      WHERE id = ?
+    `, [table_id]);
 
-    return NextResponse.json({
-      success: true,
-      message: 'แจ้งพนักงานเช็กบิลเรียบร้อยแล้ว พนักงานกำลังมาที่โต๊ะของท่านครับ',
-    });
+    return NextResponse.json({ success: true, message: 'รับทราบการเรียกเรียบร้อยแล้ว' });
   } catch (error) {
-    console.error('Failed to call bill:', error);
+    console.error('Failed to acknowledge call:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

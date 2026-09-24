@@ -11,12 +11,15 @@ export async function POST(req: Request) {
       store_id,
       table_id,
       session_id,
-      payment_method, // 'cash' | 'promptpay' | 'card'
+      payment_method, // 'cash' | 'promptpay' | 'card' | custom
       cash_received,
       discount_amount,
       vat_amount,
       service_charge,
       staff_name,
+      member_id,
+      member_name,
+      discount_details,
     } = body;
 
     if (!store_id || !table_id || !session_id) {
@@ -68,23 +71,25 @@ export async function POST(req: Request) {
     }
 
     const discount = Number(discount_amount || 0);
-    const vat = Number(vat_amount || 0);
     const sc = Number(service_charge || 0);
-    const grandTotal = Math.max(0, subtotal - discount + vat + sc);
+    const vat = Number(vat_amount || 0);
+    const grandTotal = Math.max(0, subtotal - discount + sc + vat);
 
     const cashRec = Number(cash_received || 0);
-    const changeGiven = payment_method === 'cash' ? Math.max(0, cashRec - grandTotal) : 0;
+    const isCash = payment_method === 'cash' || !payment_method;
+    const changeGiven = isCash ? Math.max(0, cashRec - grandTotal) : 0;
 
     const invoiceId = 'inv_' + Math.random().toString(36).substring(2, 9);
     const now = new Date().toISOString();
 
-    // 1. Insert Invoice
+    // 1. Insert Invoice with member and discount details
     await execute(`
       INSERT INTO invoices (
         id, store_id, session_id, table_id, table_number,
         subtotal, discount_amount, vat_amount, service_charge, grand_total,
-        payment_method, cash_received, change_given, paid_at, staff_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        payment_method, cash_received, change_given, paid_at, staff_name,
+        member_id, member_name, discount_details
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       invoiceId,
       store_id,
@@ -100,7 +105,10 @@ export async function POST(req: Request) {
       cashRec,
       changeGiven,
       now,
-      staff_name || 'แคชเชียร์'
+      staff_name || 'แคชเชียร์',
+      member_id || session.member_id || null,
+      member_name || session.member_name || null,
+      discount_details || ''
     ]);
 
     // 2. Mark session completed
@@ -117,10 +125,10 @@ export async function POST(req: Request) {
       WHERE session_id = ? AND status != 'cancelled'
     `, [session_id]);
 
-    // 4. Free the table & clear session token
+    // 4. Free the table & clear session token and service call
     await execute(`
       UPDATE tables
-      SET status = 'available', current_session_id = NULL
+      SET status = 'available', current_session_id = NULL, service_call = NULL
       WHERE id = ?
     `, [table_id]);
 
