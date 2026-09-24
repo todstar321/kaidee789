@@ -29,6 +29,7 @@ import {
 import { Store, Table, OrderItem, StoreDiscount, PaymentMethod } from '@/lib/types';
 import { formatMoney, formatThaiTime, formatThaiDate } from '@/lib/utils';
 import { playSound } from '@/lib/sound';
+import { printReceiptHtml, renderInvoiceReceiptHtml } from '@/lib/print';
 
 interface CheckoutInvoiceResult {
   invoice_id: string;
@@ -1200,7 +1201,30 @@ export default function CashierPage({ params }: { params: { storeId: string } })
 
             <div className="space-y-2">
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (!completedInvoice) return;
+                  const html = renderInvoiceReceiptHtml({
+                    storeName: store?.name,
+                    storeAddress: store?.address,
+                    storePhone: store?.phone,
+                    invoiceId: completedInvoice.invoice_id,
+                    tableNumber: completedInvoice.table_number,
+                    paidAt: completedInvoice.paid_at,
+                    memberName: completedInvoice.member_name,
+                    buffetDetails: completedInvoice.buffet_details,
+                    items: completedInvoice.items,
+                    subtotal: completedInvoice.subtotal,
+                    discountAmount: completedInvoice.discount_amount,
+                    discountDetails: completedInvoice.discount_details,
+                    serviceCharge: completedInvoice.service_charge,
+                    vatAmount: completedInvoice.vat_amount,
+                    grandTotal: completedInvoice.grand_total,
+                    paymentMethod: completedInvoice.payment_method,
+                    cashReceived: completedInvoice.cash_received,
+                    changeGiven: completedInvoice.change_given,
+                  });
+                  printReceiptHtml(html, `ใบเสร็จ_${completedInvoice.invoice_id}`);
+                }}
                 className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
               >
                 <Printer className="w-4 h-4" />

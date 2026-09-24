@@ -17,6 +17,7 @@ import {
 import { OrderItem } from '@/lib/types';
 import { formatThaiTime } from '@/lib/utils';
 import { playSound } from '@/lib/sound';
+import { printReceiptHtml, renderKitchenTicketHtml } from '@/lib/print';
 
 interface KitchenOrderItem extends OrderItem {
   table_number: string;
@@ -36,23 +37,31 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
 
   const fetchKitchenOrders = async () => {
     try {
-      const res = await fetch(`/api/orders?store_id=${params.storeId}&status=${filterStatus}`);
+      const res = await fetch(`/api/orders?store_id=${params.storeId}&status=${filterStatus}&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
       const data = await res.json();
       if (Array.isArray(data)) {
-        // Detect if any new items arrived that weren't in previous state
         const currentIds = new Set<string>(data.map(i => i.id));
-        let hasNewOrder = false;
+        const newArrivals = data.filter(i => !previousItemIdsRef.current.has(i.id));
 
-        data.forEach(item => {
-          if (!previousItemIdsRef.current.has(item.id)) {
-            hasNewOrder = true;
-          }
-        });
-
-        if (hasNewOrder && previousItemIdsRef.current.size > 0 && soundEnabled) {
-          playSound('order');
+        if (newArrivals.length > 0 && previousItemIdsRef.current.size > 0) {
+          if (soundEnabled) playSound('order');
           if (autoPrintEnabled) {
-            window.print();
+            const html = renderKitchenTicketHtml({
+              storeName: 'ออเดอร์ใหม่เข้าครัว (KDS)',
+              tableTitle: newArrivals[0]?.table_number || 'ออเดอร์ใหม่',
+              time: newArrivals[0]?.created_at,
+              items: newArrivals.map(i => ({
+                item_name: i.item_name,
+                quantity: i.quantity,
+                guest_label: i.guest_label,
+                guest_nickname: i.guest_nickname,
+                notes: i.notes,
+              })),
+            });
+            printReceiptHtml(html, 'ออเดอร์ใหม่เข้าครัว');
           }
         }
 
@@ -142,6 +151,32 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
             <span>{autoPrintEnabled ? 'พิมพ์อัตโนมัติ: เปิด' : 'พิมพ์อัตโนมัติ: ปิด'}</span>
           </button>
 
+          {/* Bulk print button */}
+          {items.length > 0 && (
+            <button
+              onClick={() => {
+                const html = renderKitchenTicketHtml({
+                  storeName: 'สรุปรายการอาหารทั้งหมดในครัว (KDS)',
+                  tableTitle: `รวมทุกโต๊ะ (${items.length} จาน)`,
+                  time: new Date().toISOString(),
+                  items: items.map(i => ({
+                    item_name: `${i.table_number}: ${i.item_name}`,
+                    quantity: i.quantity,
+                    guest_label: i.guest_label,
+                    guest_nickname: i.guest_nickname,
+                    notes: i.notes,
+                  })),
+                });
+                printReceiptHtml(html, 'สรุปออเดอร์ทั้งหมดในครัว');
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+              title="พิมพ์ตั๋วสรุปรายการอาหารทั้งหมดที่ค้างอยู่ในครัว"
+            >
+              <Printer className="w-4 h-4 text-orange-400" />
+              <span>พิมพ์ทั้งหมด ({items.length})</span>
+            </button>
+          )}
+
           <button
             onClick={() => fetchKitchenOrders()}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
@@ -226,11 +261,26 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
                 </div>
 
                 <button
-                  onClick={() => window.print()}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                  title="พิมพ์ตั๋วครัว"
+                  onClick={() => {
+                    const html = renderKitchenTicketHtml({
+                      storeName: 'ตั๋วออเดอร์เข้าครัว (KDS)',
+                      tableTitle,
+                      time: groupItems[0]?.created_at,
+                      items: groupItems.map(i => ({
+                        item_name: i.item_name,
+                        quantity: i.quantity,
+                        guest_label: i.guest_label,
+                        guest_nickname: i.guest_nickname,
+                        notes: i.notes,
+                      })),
+                    });
+                    printReceiptHtml(html, `ตั๋วครัว_${tableTitle}`);
+                  }}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5"
+                  title="พิมพ์ตั๋วครัวของโต๊ะนี้"
                 >
                   <Printer className="w-4 h-4" />
+                  <span className="text-[11px] font-bold">พิมพ์ตั๋ว</span>
                 </button>
               </div>
 
@@ -320,22 +370,6 @@ export default function KitchenPage({ params }: { params: { storeId: string } })
           ))}
         </div>
       )}
-
-      {/* Printable Kitchen Ticket (Hidden until Print) */}
-      <div className="printable-receipt hidden">
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0' }}>ใบสั่งอาหารเข้าครัว</h2>
-          <p style={{ fontSize: '12px', margin: '2px 0' }}>พิมพ์อัตโนมัติ KDS</p>
-        </div>
-        <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '6px 0' }}>
-          {items.slice(0, 5).map(it => (
-            <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', margin: '4px 0' }}>
-              <span>{it.item_name} x{it.quantity}</span>
-              <span>{it.table_number}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

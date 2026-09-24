@@ -33,6 +33,7 @@ import {
 import { Store, Table, BuffetTier, Member, TableStatus, ServiceCallType } from '@/lib/types';
 import { formatMoney, formatThaiTime, cn } from '@/lib/utils';
 import { playSound } from '@/lib/sound';
+import { printReceiptHtml, renderTableSlipHtml } from '@/lib/print';
 
 interface TableWithDetails extends Table {
   session?: {
@@ -374,8 +375,31 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
     setViewQrDataUrl(qrImage);
   };
 
-  const handlePrintSlip = () => {
-    window.print();
+  const handlePrintJustOpenedSlip = () => {
+    if (!justOpenedSession) return;
+    const html = renderTableSlipHtml({
+      storeName: store?.name,
+      tableNumber: justOpenedSession.tableNumber,
+      qrDataUrl: justOpenedSession.qrDataUrl,
+      openedAt: new Date().toISOString(),
+      guestCount: openGuestCount,
+      memberName: justOpenedSession.memberName,
+    });
+    printReceiptHtml(html, `ใบเปิดโต๊ะ_${justOpenedSession.tableNumber}`);
+  };
+
+  const handlePrintViewQrSlip = () => {
+    if (!viewQrModalTarget) return;
+    const html = renderTableSlipHtml({
+      storeName: store?.name,
+      tableNumber: viewQrModalTarget.table_number,
+      zone: viewQrModalTarget.zone,
+      qrDataUrl: viewQrDataUrl,
+      openedAt: viewQrModalTarget.session?.opened_at,
+      guestCount: viewQrModalTarget.session?.guest_count,
+      memberName: viewQrModalTarget.session?.member_name || undefined,
+    });
+    printReceiptHtml(html, `ใบเปิดโต๊ะ_${viewQrModalTarget.table_number}`);
   };
 
   // Distinct zones
@@ -1416,7 +1440,7 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </a>
 
               <button
-                onClick={handlePrintSlip}
+                onClick={handlePrintJustOpenedSlip}
                 className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -1471,7 +1495,7 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
               </a>
 
               <button
-                onClick={handlePrintSlip}
+                onClick={handlePrintViewQrSlip}
                 className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
               >
                 <Printer className="w-3.5 h-3.5" />
