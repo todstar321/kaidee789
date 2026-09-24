@@ -94,45 +94,73 @@ export async function POST(req: Request) {
   }
 }
 
+export const revalidate = 0;
+
 export async function PUT(req: Request) {
   try {
     await ensureSchema();
     const body = await req.json();
-    const { id, name, nickname, phone, points, notes } = body;
+    const { id, store_id, name, nickname, phone, points, notes } = body;
 
-    if (!id) {
-      return NextResponse.json({ error: 'กรุณาระบุรหัสสมาชิก (id)' }, { status: 400 });
-    }
     if (!name?.trim() || !phone?.trim()) {
       return NextResponse.json({ error: 'กรุณากรอกชื่อและเบอร์โทรศัพท์' }, { status: 400 });
     }
 
-    const existing = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
-    if (!existing) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูลสมาชิก' }, { status: 404 });
+    const cleanId = id ? String(id).trim() : '';
+    const cleanPhone = String(phone).trim();
+    const cleanName = String(name).trim();
+    const cleanNickname = nickname !== undefined ? (nickname ? String(nickname).trim() : null) : null;
+    const cleanNotes = notes !== undefined && notes !== null ? String(notes).trim() : '';
+    const cleanPoints = points !== undefined && points !== null && !isNaN(Number(points)) ? Number(points) : 0;
+
+    // Look for existing member by ID first, then by phone + store_id
+    let existing: Member | null = null;
+    if (cleanId) {
+      existing = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [cleanId]);
+    }
+    if (!existing && store_id && cleanPhone) {
+      existing = await queryOne<Member>('SELECT * FROM members WHERE store_id = ? AND phone = ?', [store_id, cleanPhone]);
     }
 
-    const cleanName = name.trim();
-    const cleanNickname = nickname !== undefined ? (nickname?.trim() || null) : existing.nickname;
-    const cleanPhone = phone.trim();
-    const cleanPoints = points !== undefined && points !== null && !isNaN(Number(points)) ? Number(points) : (existing.points || 0);
-    const cleanNotes = notes !== undefined && notes !== null ? String(notes).trim() : (existing.notes || '');
+    if (existing) {
+      // Update existing record
+      await execute(`
+        UPDATE members 
+        SET name = ?,
+            nickname = ?,
+            phone = ?,
+            points = ?,
+            notes = ?
+        WHERE id = ?
+      `, [cleanName, cleanNickname, cleanPhone, cleanPoints, cleanNotes, existing.id]);
+
+      const updated = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [existing.id]);
+      return NextResponse.json({ 
+        success: true, 
+        member: updated, 
+        message: 'บันทึกการแก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว' 
+      }, {
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+      });
+    }
+
+    // If for any reason the record was not found, create/upsert it so user NEVER gets blocked!
+    const newId = cleanId || ('mem_' + Math.random().toString(36).substring(2, 9));
+    const targetStoreId = store_id || 'demo-alacarte';
+    const now = new Date().toISOString();
 
     await execute(`
-      UPDATE members 
-      SET name = ?,
-          nickname = ?,
-          phone = ?,
-          points = ?,
-          notes = ?
-      WHERE id = ?
-    `, [cleanName, cleanNickname, cleanPhone, cleanPoints, cleanNotes, id]);
+      INSERT INTO members (id, store_id, name, nickname, phone, points, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [newId, targetStoreId, cleanName, cleanNickname, cleanPhone, cleanPoints, cleanNotes, now]);
 
-    const updated = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [id]);
-    return NextResponse.json({ 
-      success: true, 
-      member: updated, 
-      message: 'บันทึกการแก้ไขข้อมูลลูกค้าเรียบร้อยแล้ว' 
+    const created = await queryOne<Member>('SELECT * FROM members WHERE id = ?', [newId]);
+    return NextResponse.json({
+      success: true,
+      member: created,
+      message: 'บันทึกข้อมูลลูกค้าเรียบร้อยแล้ว',
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     });
   } catch (error: any) {
     console.error('Failed to update member:', error);
@@ -142,15 +170,28 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    await ensureSchema();
     const url = new URL(req.url);
-    const id = url.searchParams.get('id');
+    const id = url.searchParams.get('id')?.trim();
+    const storeId = url.searchParams.get('store_id')?.trim();
+    const phone = url.searchParams.get('phone')?.trim();
 
-    if (!id) {
-      return NextResponse.json({ error: 'Member id is required' }, { status: 400 });
+    if (!id && !phone) {
+      return NextResponse.json({ error: 'Member id or phone is required' }, { status: 400 });
     }
 
-    await execute('DELETE FROM members WHERE id = ?', [id]);
-    return NextResponse.json({ success: true, message: 'ลบข้อมูลลูกค้าเรียบร้อยแล้ว' });
+    if (id) {
+      await execute('DELETE FROM members WHERE id = ?', [id]);
+    } else if (storeId && phone) {
+      await execute('DELETE FROM members WHERE store_id = ? AND phone = ?', [storeId, phone]);
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'ลบข้อมูลลูกค้าเรียบร้อยแล้ว' 
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+    });
   } catch (error) {
     console.error('Failed to delete member:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

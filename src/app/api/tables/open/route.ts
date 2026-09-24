@@ -36,6 +36,21 @@ export async function POST(req: Request) {
       buffetEndTime = end.toISOString();
     }
 
+    let finalMemberId = member_id ? String(member_id).trim() : null;
+    if (!finalMemberId && member_phone?.trim()) {
+      const cleanPhone = String(member_phone).trim();
+      const existingMem = await queryOne<{ id: string }>('SELECT id FROM members WHERE store_id = ? AND phone = ?', [store_id, cleanPhone]);
+      if (existingMem) {
+        finalMemberId = existingMem.id;
+      } else if (member_name?.trim()) {
+        finalMemberId = 'mem_' + Math.random().toString(36).substring(2, 9);
+        await execute(`
+          INSERT INTO members (id, store_id, name, nickname, phone, points, notes, created_at)
+          VALUES (?, ?, ?, ?, ?, 0, '', ?)
+        `, [finalMemberId, store_id, String(member_name).trim(), member_nickname ? String(member_nickname).trim() : null, cleanPhone, openedAt]).catch(() => {});
+      }
+    }
+
     // Insert session with optional member info
     await execute(`
       INSERT INTO table_sessions (
@@ -51,10 +66,10 @@ export async function POST(req: Request) {
       buffet_tier_id || null,
       buffetEndTime,
       token,
-      member_id || null,
-      member_name || null,
-      member_nickname || null,
-      member_phone || null,
+      finalMemberId,
+      member_name ? String(member_name).trim() : null,
+      member_nickname ? String(member_nickname).trim() : null,
+      member_phone ? String(member_phone).trim() : null,
     ]);
 
     // Update table

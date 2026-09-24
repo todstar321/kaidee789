@@ -794,4 +794,183 @@ export function renderKitchenTicketHtml(
   `;
 }
 
+/**
+ * Renders an executive accounting and sales report for standard A4 paper.
+ * Ideal for Daily, Monthly, and Custom Range financial summaries.
+ */
+export function renderAccountingReportHtml(data: {
+  storeName?: string;
+  title: string;
+  dateLabel: string;
+  printedAt?: string;
+  summary: {
+    total_revenue: number;
+    total_discount: number;
+    total_vat: number;
+    total_service_charge?: number;
+    total_cogs: number;
+    gross_profit: number;
+    total_expenses: number;
+    net_profit: number;
+    profit_margin?: number;
+    invoice_count: number;
+    avg_ticket?: number;
+    payment_breakdown?: {
+      cash: number;
+      promptpay: number;
+      card: number;
+      other?: number;
+    };
+  };
+  dailyBreakdown?: Array<{
+    date: string;
+    invoice_count: number;
+    revenue: number;
+    cogs: number;
+    expenses: number;
+    net_profit: number;
+  }>;
+  invoices?: Array<{
+    id: string;
+    table_number?: string;
+    grand_total: number;
+    payment_method: string;
+    paid_at: string;
+  }>;
+  expenses?: Array<{
+    title: string;
+    category: string;
+    amount: number;
+    date: string;
+  }>;
+}): string {
+  const p = data.summary.payment_breakdown || { cash: 0, promptpay: 0, card: 0 };
+  const margin = data.summary.profit_margin !== undefined
+    ? data.summary.profit_margin.toFixed(1)
+    : (data.summary.total_revenue > 0 ? ((data.summary.net_profit / data.summary.total_revenue) * 100).toFixed(1) : '0');
+
+  return `
+    <div style="font-family: 'Sarabun', 'Prompt', sans-serif; color: #1e293b; line-height: 1.5; padding: 20px 10px;">
+      <!-- Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px;">
+        <div>
+          <h1 style="font-size: 22px; font-weight: 900; margin: 0; color: #0f172a;">${data.storeName || 'รายงานยอดขาย & บัญชีร้านค้า'}</h1>
+          <h2 style="font-size: 16px; font-weight: 700; color: #475569; margin: 4px 0 0 0;">${data.title}</h2>
+          <div style="font-size: 13px; color: #64748b; margin-top: 4px;">ช่วงเวลา: <strong>${data.dateLabel}</strong></div>
+        </div>
+        <div style="text-align: right; font-size: 12px; color: #64748b;">
+          <div>พิมพ์เมื่อ: ${formatThaiDate(data.printedAt || new Date().toISOString())} ${formatThaiTime(data.printedAt || new Date().toISOString())} น.</div>
+          <div style="margin-top: 4px; font-weight: bold; color: #0f172a;">ระบบขายดี สั่ง QR Code (POS)</div>
+        </div>
+      </div>
+
+      <!-- Financial KPI Cards Grid -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+        <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; background: #f8fafc;">
+          <div style="font-size: 12px; color: #64748b; font-weight: 600;">ยอดขายรวม (Revenue)</div>
+          <div style="font-size: 20px; font-weight: 900; color: #0f172a; margin-top: 4px;">฿${formatMoney(data.summary.total_revenue)}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">จำนวน ${data.summary.invoice_count} บิล</div>
+        </div>
+
+        <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; background: #f8fafc;">
+          <div style="font-size: 12px; color: #64748b; font-weight: 600;">ต้นทุนอาหาร (COGS)</div>
+          <div style="font-size: 20px; font-weight: 900; color: #dc2626; margin-top: 4px;">฿${formatMoney(data.summary.total_cogs)}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">กำไรขั้นต้น: ฿${formatMoney(data.summary.gross_profit)}</div>
+        </div>
+
+        <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; background: #f8fafc;">
+          <div style="font-size: 12px; color: #64748b; font-weight: 600;">รายจ่ายประจำร้าน</div>
+          <div style="font-size: 20px; font-weight: 900; color: #d97706; margin-top: 4px;">฿${formatMoney(data.summary.total_expenses)}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">ของสด แก๊ส ค่าแรง ฯลฯ</div>
+        </div>
+
+        <div style="border: 2px solid #0f172a; border-radius: 10px; padding: 12px; background: #0f172a; color: #ffffff;">
+          <div style="font-size: 12px; color: #94a3b8; font-weight: 600;">กำไรสุทธิ (Net Profit)</div>
+          <div style="font-size: 22px; font-weight: 900; color: #4ade80; margin-top: 4px;">฿${formatMoney(data.summary.net_profit)}</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Profit Margin: ${margin}%</div>
+        </div>
+      </div>
+
+      <!-- Payment Breakdown Strip -->
+      <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; margin-bottom: 24px; background: #ffffff; display: flex; justify-content: space-around; font-size: 13px;">
+        <div>💵 <strong>เงินสด:</strong> ฿${formatMoney(p.cash || 0)}</div>
+        <div>📱 <strong>PromptPay / โอน:</strong> ฿${formatMoney(p.promptpay || 0)}</div>
+        <div>💳 <strong>บัตรเครดิต:</strong> ฿${formatMoney(p.card || 0)}</div>
+        ${p.other ? `<div>🔖 <strong>อื่นๆ:</strong> ฿${formatMoney(p.other)}</div>` : ''}
+        <div>🎯 <strong>ยอดเฉลี่ยต่อบิล:</strong> ฿${formatMoney(data.summary.avg_ticket || 0)}</div>
+      </div>
+
+      ${data.dailyBreakdown && data.dailyBreakdown.length > 0 ? `
+        <!-- Daily Breakdown Table -->
+        <h3 style="font-size: 15px; font-weight: 800; margin: 0 0 8px 0; color: #0f172a;">สรุปยอดขายแยกรายวัน (Daily Breakdown)</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 24px;">
+          <thead>
+            <tr style="background: #f1f5f9; border-top: 1px solid #cbd5e1; border-bottom: 2px solid #94a3b8; text-align: left;">
+              <th style="padding: 6px 8px;">วันที่</th>
+              <th style="padding: 6px 8px; text-align: center;">จำนวนบิล</th>
+              <th style="padding: 6px 8px; text-align: right;">ยอดขายรวม</th>
+              <th style="padding: 6px 8px; text-align: right;">ต้นทุน (COGS)</th>
+              <th style="padding: 6px 8px; text-align: right;">ค่าใช้จ่าย</th>
+              <th style="padding: 6px 8px; text-align: right;">กำไรสุทธิ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.dailyBreakdown.map((row, idx) => `
+              <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="padding: 6px 8px; font-weight: bold;">${formatThaiDate(row.date)}</td>
+                <td style="padding: 6px 8px; text-align: center;">${row.invoice_count}</td>
+                <td style="padding: 6px 8px; text-align: right; font-weight: bold;">฿${formatMoney(row.revenue)}</td>
+                <td style="padding: 6px 8px; text-align: right; color: #dc2626;">฿${formatMoney(row.cogs)}</td>
+                <td style="padding: 6px 8px; text-align: right; color: #d97706;">฿${formatMoney(row.expenses)}</td>
+                <td style="padding: 6px 8px; text-align: right; font-weight: 900; color: ${row.net_profit >= 0 ? '#16a34a' : '#dc2626'};">฿${formatMoney(row.net_profit)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
+      ${data.invoices && data.invoices.length > 0 && (!data.dailyBreakdown || data.dailyBreakdown.length <= 1) ? `
+        <!-- Invoices List -->
+        <h3 style="font-size: 15px; font-weight: 800; margin: 0 0 8px 0; color: #0f172a;">รายการบิลที่ชำระแล้ว (${data.invoices.length} บิล)</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 24px;">
+          <thead>
+            <tr style="background: #f1f5f9; border-top: 1px solid #cbd5e1; border-bottom: 2px solid #94a3b8; text-align: left;">
+              <th style="padding: 5px 6px;">ลำดับ</th>
+              <th style="padding: 5px 6px;">เลขที่บิล</th>
+              <th style="padding: 5px 6px;">โต๊ะ</th>
+              <th style="padding: 5px 6px;">เวลาชำระ</th>
+              <th style="padding: 5px 6px;">ช่องทาง</th>
+              <th style="padding: 5px 6px; text-align: right;">ยอดสุทธิ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.invoices.map((inv, idx) => `
+              <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="padding: 5px 6px;">${idx + 1}</td>
+                <td style="padding: 5px 6px; font-family: monospace;">${inv.id}</td>
+                <td style="padding: 5px 6px; font-weight: bold;">${inv.table_number || '-'}</td>
+                <td style="padding: 5px 6px;">${formatThaiTime(inv.paid_at)} น.</td>
+                <td style="padding: 5px 6px; text-transform: uppercase;">${inv.payment_method}</td>
+                <td style="padding: 5px 6px; text-align: right; font-weight: bold;">฿${formatMoney(inv.grand_total)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
+      <!-- Footer Signatures -->
+      <div style="margin-top: 40px; display: flex; justify-content: space-between; font-size: 12px; color: #475569; padding-top: 20px; border-top: 1px solid #cbd5e1;">
+        <div style="text-align: center; width: 200px;">
+          <div>........................................................</div>
+          <div style="margin-top: 6px;">ผู้จัดทำรายงาน / แคชเชียร์</div>
+        </div>
+        <div style="text-align: center; width: 200px;">
+          <div>........................................................</div>
+          <div style="margin-top: 6px;">ผู้จัดการร้าน / เจ้าของร้าน</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 

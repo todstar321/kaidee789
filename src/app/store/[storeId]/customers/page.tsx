@@ -83,7 +83,13 @@ export default function CustomersPage({ params }: { params: { storeId: string } 
   const fetchMembers = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/members/stats?store_id=${params.storeId}&month=${selectedMonth}&_t=${Date.now()}`);
+      const res = await fetch(`/api/members/stats?store_id=${params.storeId}&month=${selectedMonth}&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          Pragma: 'no-cache',
+        },
+      });
       const data = await res.json();
       if (Array.isArray(data.members)) {
         setMembers(data.members);
@@ -105,7 +111,9 @@ export default function CustomersPage({ params }: { params: { storeId: string } 
     setViewHistoryMember(m);
     setLoadingInvoices(true);
     try {
-      const res = await fetch(`/api/members/stats?store_id=${params.storeId}&member_id=${m.id}&_t=${Date.now()}`);
+      const res = await fetch(`/api/members/stats?store_id=${params.storeId}&member_id=${m.id}&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       const data = await res.json();
       setMemberInvoices(data.invoices || []);
     } catch (err) {
@@ -141,14 +149,19 @@ export default function CustomersPage({ params }: { params: { storeId: string } 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           store_id: params.storeId,
-          ...formData,
+          name: formData.name.trim(),
+          nickname: formData.nickname.trim() || null,
+          phone: formData.phone.trim(),
+          points: Number(formData.points) || 0,
+          notes: formData.notes.trim(),
         }),
       });
       const data = await res.json();
       if (data.success) {
+        alert('✅ บันทึกลงทะเบียนลูกค้าใหม่เรียบร้อยแล้ว');
         setShowAddModal(false);
         setFormData({ name: '', nickname: '', phone: '', points: 0, notes: '' });
-        fetchMembers();
+        await fetchMembers();
       } else {
         alert(data.error || 'ไม่สามารถบันทึกข้อมูลได้');
       }
@@ -172,13 +185,19 @@ export default function CustomersPage({ params }: { params: { storeId: string } 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingMember.id,
-          ...formData,
+          store_id: params.storeId,
+          name: formData.name.trim(),
+          nickname: formData.nickname.trim() || null,
+          phone: formData.phone.trim(),
+          points: Number(formData.points) || 0,
+          notes: formData.notes.trim(),
         }),
       });
       const data = await res.json();
       if (data.success) {
+        alert('✅ บันทึกการแก้ไขข้อมูลลูกค้าสำเร็จเรียบร้อย');
         setEditingMember(null);
-        fetchMembers();
+        await fetchMembers();
       } else {
         alert(data.error || 'ไม่สามารถบันทึกการแก้ไขได้');
       }
@@ -192,15 +211,20 @@ export default function CustomersPage({ params }: { params: { storeId: string } 
   const handleDeleteMember = async (id: string, name: string) => {
     if (!confirm(`คุณต้องการลบข้อมูลลูกค้า "${name}" ใช่หรือไม่?`)) return;
     try {
-      const res = await fetch(`/api/members?id=${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/members?id=${encodeURIComponent(id)}&store_id=${params.storeId}`, {
+        method: 'DELETE',
+      });
       const data = await res.json();
       if (data.success) {
-        fetchMembers();
+        alert(`✅ ลบข้อมูลลูกค้า "${name}" เรียบร้อยแล้ว`);
+        setMembers(prev => prev.filter(m => m.id !== id));
+        await fetchMembers();
       } else {
         alert(data.error || 'ไม่สามารถลบได้');
       }
     } catch (err) {
       console.error(err);
+      alert('เกิดข้อผิดพลาดในการลบข้อมูลลูกค้า');
     }
   };
 

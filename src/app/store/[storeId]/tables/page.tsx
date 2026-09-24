@@ -165,6 +165,22 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
   });
   const [isSavingEditTable, setIsSavingEditTable] = useState(false);
 
+  // Zone Management State
+  const [showAddZoneModal, setShowAddZoneModal] = useState(false);
+  const [newZoneForm, setNewZoneForm] = useState({
+    zone_name: '',
+    table_prefix: 'โต๊ะ',
+    start_number: 1,
+    table_count: 4,
+    capacity: 4,
+    assigned_staff: '',
+  });
+  const [isSavingNewZone, setIsSavingNewZone] = useState(false);
+
+  const [renameZoneTarget, setRenameZoneTarget] = useState<string | null>(null);
+  const [newZoneNameInput, setNewZoneNameInput] = useState('');
+  const [isRenamingZone, setIsRenamingZone] = useState(false);
+
   // Call Notification state
   const [activeCallTable, setActiveCallTable] = useState<TableWithDetails | null>(null);
   const prevCallsRef = useRef<Set<string>>(new Set());
@@ -565,6 +581,79 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
       await fetchTables();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Zone CRUD Handlers
+  const handleSaveAddZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newZoneForm.zone_name.trim()) {
+      alert('กรุณากรอกชื่อโซน');
+      return;
+    }
+    setIsSavingNewZone(true);
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'create_zone',
+          store_id: params.storeId,
+          ...newZoneForm,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddZoneModal(false);
+        setNewZoneForm({
+          zone_name: '',
+          table_prefix: 'โต๊ะ',
+          start_number: 1,
+          table_count: 4,
+          capacity: 4,
+          assigned_staff: '',
+        });
+        alert(`✅ สร้างโซน "${data.zone}" พร้อมสร้างโต๊ะ ${data.created_count} โต๊ะเรียบร้อยแล้ว!`);
+        await fetchTables();
+      } else {
+        alert(data.error || 'สร้างโซนไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } finally {
+      setIsSavingNewZone(false);
+    }
+  };
+
+  const handleConfirmRenameZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renameZoneTarget || !newZoneNameInput.trim()) return;
+    setIsRenamingZone(true);
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rename_zone',
+          store_id: params.storeId,
+          old_zone: renameZoneTarget,
+          new_zone: newZoneNameInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ เปลี่ยนชื่อโซนเป็น "${newZoneNameInput.trim()}" สำเร็จ`);
+        setRenameZoneTarget(null);
+        await fetchTables();
+      } else {
+        alert(data.error || 'เปลี่ยนชื่อโซนไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเปลี่ยนชื่อโซน');
+    } finally {
+      setIsRenamingZone(false);
     }
   };
 
@@ -1086,6 +1175,14 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
           </button>
 
           <button
+            onClick={() => setShowAddZoneModal(true)}
+            className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition whitespace-nowrap"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>เพิ่มโซนใหม่</span>
+          </button>
+
+          <button
             onClick={() => fetchTables()}
             className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
             title="รีเฟรชข้อมูล"
@@ -1120,6 +1217,14 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
             {zone} ({tables.filter(t => t.zone === zone).length})
           </button>
         ))}
+
+        <button
+          onClick={() => setShowAddZoneModal(true)}
+          className="px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center gap-1.5 whitespace-nowrap"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>เพิ่มโซน</span>
+        </button>
       </div>
 
       {/* MAIN TWO-COLUMN LAYOUT: TABLES GRID (LEFT) + LIVE ORDERS SIDEBAR (RIGHT) */}
@@ -1163,12 +1268,41 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                         </div>
                       </div>
 
-                      {/* Zone Staff Assignment Button */}
-                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                      {/* Zone Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                         <div className="text-xs bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
                           <span className="text-slate-500">พนักงานดูแลโซน: </span>
                           <strong className="text-slate-800">{displayZoneStaff}</strong>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewTableForm({
+                              table_number: `โต๊ะ ${zoneTables.length + 1}`,
+                              zone: zoneName,
+                              capacity: 4,
+                            });
+                            setShowAddTableModal(true);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>เพิ่มโต๊ะในโซนนี้</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenameZoneTarget(zoneName);
+                            setNewZoneNameInput(zoneName);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 transition"
+                          title="เปลี่ยนชื่อโซน"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                          <span>เปลี่ยนชื่อ</span>
+                        </button>
 
                         <button
                           type="button"
@@ -1184,7 +1318,7 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                           className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
-                          <span>กำหนดพนักงานประจำโซน</span>
+                          <span>กำหนดพนักงาน</span>
                         </button>
                       </div>
                     </div>
@@ -2209,6 +2343,7 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                   value={newTableForm.table_number}
                   onChange={(e) => setNewTableForm({ ...newTableForm, table_number: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-orange-500"
+                  autoFocus
                 />
               </div>
 
@@ -2230,7 +2365,11 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                         key={z}
                         type="button"
                         onClick={() => setNewTableForm({ ...newTableForm, zone: z })}
-                        className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-600 hover:bg-orange-50 hover:text-orange-600"
+                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${
+                          newTableForm.zone === z
+                            ? 'bg-orange-600 text-white font-bold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-600'
+                        }`}
                       >
                         {z}
                       </button>
@@ -2267,6 +2406,190 @@ export default function TablesPage({ params }: { params: { storeId: string } }) 
                   className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-md shadow-orange-600/30 transition disabled:opacity-50"
                 >
                   {isSavingNewTable ? 'กำลังสร้าง...' : '✓ เพิ่มโต๊ะ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD NEW ZONE */}
+      {showAddZoneModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <Layers className="w-5 h-5 text-indigo-600" />
+                <span>เพิ่มโซนใหม่ (Add New Zone)</span>
+              </h3>
+              <button
+                onClick={() => setShowAddZoneModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAddZone} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ชื่อโซนใหม่ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น ระเบียงริมน้ำ, ห้อง VIP 2, ดาดฟ้า, โซนบาร์"
+                  value={newZoneForm.zone_name}
+                  onChange={(e) => setNewZoneForm({ ...newZoneForm, zone_name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    คำนำหน้าชื่อโต๊ะ
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="เช่น โต๊ะ หรือ VIP"
+                    value={newZoneForm.table_prefix}
+                    onChange={(e) => setNewZoneForm({ ...newZoneForm, table_prefix: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    จำนวนโต๊ะที่จะสร้าง
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={newZoneForm.table_count}
+                    onChange={(e) => setNewZoneForm({ ...newZoneForm, table_count: Number(e.target.value) || 1 })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    เริ่มที่หมายเลข
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newZoneForm.start_number}
+                    onChange={(e) => setNewZoneForm({ ...newZoneForm, start_number: Number(e.target.value) || 1 })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    ตัวอย่าง: {newZoneForm.table_prefix} {newZoneForm.start_number} ถึง {newZoneForm.table_prefix} {newZoneForm.start_number + newZoneForm.table_count - 1}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    ที่นั่งต่อโต๊ะ (คน)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={newZoneForm.capacity}
+                    onChange={(e) => setNewZoneForm({ ...newZoneForm, capacity: Number(e.target.value) || 4 })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  พนักงานดูแลประจำโซน (ถ้ามี)
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น น้องฟ้า, กัปตันเอก"
+                  value={newZoneForm.assigned_staff}
+                  onChange={(e) => setNewZoneForm({ ...newZoneForm, assigned_staff: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddZoneModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingNewZone}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md shadow-indigo-600/30 transition disabled:opacity-50"
+                >
+                  {isSavingNewZone ? 'กำลังสร้างโซน...' : '✓ บันทึกสร้างโซนใหม่'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RENAME ZONE */}
+      {renameZoneTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-indigo-600" />
+                <span>เปลี่ยนชื่อโซน</span>
+              </h3>
+              <button
+                onClick={() => setRenameZoneTarget(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmRenameZone} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-500 mb-1">
+                  ชื่อโซนเดิม: <strong className="text-slate-800">{renameZoneTarget}</strong>
+                </label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ชื่อโซนใหม่ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newZoneNameInput}
+                  onChange={(e) => setNewZoneNameInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setRenameZoneTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRenamingZone}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md shadow-indigo-600/30 transition disabled:opacity-50"
+                >
+                  {isRenamingZone ? 'กำลังบันทึก...' : '✓ บันทึกชื่อใหม่'}
                 </button>
               </div>
             </form>

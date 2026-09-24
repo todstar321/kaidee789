@@ -37,10 +37,23 @@ async function handleUpdateCustomer(req: Request) {
     }
 
     // Clean values
-    const finalMemberId = member_id ? String(member_id).trim() : null;
+    let finalMemberId = member_id ? String(member_id).trim() : null;
     const finalMemberName = member_name ? String(member_name).trim() : null;
     const finalMemberNickname = member_nickname ? String(member_nickname).trim() : null;
     const finalMemberPhone = member_phone ? String(member_phone).trim() : null;
+
+    if (!finalMemberId && finalMemberPhone) {
+      const existingMem = await queryOne<{ id: string }>('SELECT id FROM members WHERE store_id = ? AND phone = ?', [store_id, finalMemberPhone]);
+      if (existingMem) {
+        finalMemberId = existingMem.id;
+      } else if (finalMemberName) {
+        finalMemberId = 'mem_' + Math.random().toString(36).substring(2, 9);
+        await execute(`
+          INSERT INTO members (id, store_id, name, nickname, phone, points, notes, created_at)
+          VALUES (?, ?, ?, ?, ?, 0, '', ?)
+        `, [finalMemberId, store_id, finalMemberName, finalMemberNickname, finalMemberPhone, new Date().toISOString()]).catch(() => {});
+      }
+    }
 
     // Update table_sessions
     await execute(`
